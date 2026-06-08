@@ -34,6 +34,9 @@
 #include "kbutton.h"
 #include "input.h"
 #include "com_weapons.h"
+#include "camera.h"
+
+extern bool g_bAimAssistKey; // aim button hold state (input_xash3d.cpp) -- drives OTS zoom
 
 #ifndef M_PI
 #define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
@@ -1805,25 +1808,49 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 
 	lasttime = pparams->time;
 
-	vec3_t ofs, camAngles, camForward, camRight, camUp;
-
-	ofs[0] = ofs[1] = ofs[2] = 0.0;
-
-	CL_CameraOffset( (float *)&ofs );
-
-	VectorCopy( ofs, camAngles );
-	camAngles[ ROLL ]	= 0;
-
-	AngleVectors( camAngles, camForward, camRight, camUp );
-
-	for ( int i = 0; i < 3; i++ )
+	if( cam_thirdperson_enable && cam_thirdperson_enable->value )
 	{
-		pparams->vieworg[ i ] += -ofs[2] * camForward[ i ];
+		// Over-the-shoulder (Max Payne 3 style): camera sits behind+beside the player and
+		// looks where the player aims (viewangles already = cl_viewangles + punch above).
+		Vector fwd, right, up;
+		AngleVectors( pparams->viewangles, fwd, right, up );
+
+		// Smoothly zoom the camera in while aiming (L2 / +aimassist).
+		static float curDist = 0.0f;
+		float target = g_bAimAssistKey ? cam_ots_aim_dist->value : cam_ots_dist->value;
+		float lerp = pparams->frametime * 10.0f;
+		if( lerp > 1.0f ) lerp = 1.0f;
+		if( lerp < 0.0f ) lerp = 0.0f;
+		curDist += ( target - curDist ) * lerp;
+
+		// Apply the shoulder + height offset to the start point, then trace straight back
+		// (V_GetChaseOrigin keeps the camera out of walls). viewangles is left untouched, so
+		// the camera looks along the player's aim.
+		pparams->vieworg = pparams->vieworg + right * cam_ots_side->value + up * cam_ots_up->value;
+		V_GetChaseOrigin( pparams->viewangles, pparams->vieworg, curDist, pparams->vieworg );
 	}
+	else
+	{
+		vec3_t ofs, camAngles, camForward, camRight, camUp;
 
-	VectorCopy( camAngles, pparams->viewangles);
+		ofs[0] = ofs[1] = ofs[2] = 0.0;
 
-	V_GetChaseOrigin( pparams->viewangles, pparams->vieworg, cl_chasedist->value, pparams->vieworg );
+		CL_CameraOffset( (float *)&ofs );
+
+		VectorCopy( ofs, camAngles );
+		camAngles[ ROLL ]	= 0;
+
+		AngleVectors( camAngles, camForward, camRight, camUp );
+
+		for ( int i = 0; i < 3; i++ )
+		{
+			pparams->vieworg[ i ] += -ofs[2] * camForward[ i ];
+		}
+
+		VectorCopy( camAngles, pparams->viewangles);
+
+		V_GetChaseOrigin( pparams->viewangles, pparams->vieworg, cl_chasedist->value, pparams->vieworg );
+	}
 
 	float pitch = pparams->viewangles[PITCH];
 

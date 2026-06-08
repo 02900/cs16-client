@@ -19,6 +19,7 @@
 #include <math.h>
 #include "hud.h"
 #include "cl_util.h"
+#include "camera.h"
 #include <stdlib.h>
 #include <memory.h>
 
@@ -27,6 +28,7 @@ void CL_ResetButtonBits( int bits );
 
 extern float v_idlescale;
 extern void HUD_SetCmdBits( int bits );
+extern bool g_bAimAssistKey; // aim button hold state (input_xash3d.cpp)
 
 int CHud::UpdateClientData(client_data_t *cdata, float time)
 {
@@ -39,7 +41,16 @@ int CHud::UpdateClientData(client_data_t *cdata, float time)
 	Think();
 
 	cdata->fov = m_iFOV;
-	
+
+	// OTS aim zoom: optionally narrow the FOV while aiming in third person.
+	// Off by default (cam_ots_aim_fov 0); guarded so it never overrides a scope's tighter FOV.
+	if( cam_thirdperson_enable && cam_thirdperson_enable->value && g_bAimAssistKey
+		&& cam_ots_aim_fov && cam_ots_aim_fov->value > 0
+		&& ( m_iFOV == 0 || m_iFOV >= cam_ots_aim_fov->value ) )
+	{
+		cdata->fov = cam_ots_aim_fov->value;
+	}
+
 	v_idlescale = m_iConcussionEffect;
 
 	CL_ResetButtonBits( m_iKeyBits );

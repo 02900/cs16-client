@@ -49,6 +49,15 @@ cvar_t	*cam_idealyaw;
 cvar_t	*cam_idealpitch;
 cvar_t	*cam_idealdist;
 cvar_t	*cam_contain;
+cvar_t	*cam_allow_multiplayer;	// allow thirdperson on multiplayer/bot servers
+
+// Over-the-shoulder (Max Payne 3 style) camera
+cvar_t	*cam_thirdperson_enable;
+cvar_t	*cam_ots_dist;
+cvar_t	*cam_ots_side;
+cvar_t	*cam_ots_up;
+cvar_t	*cam_ots_aim_dist;
+cvar_t	*cam_ots_aim_fov;
 
 cvar_t	*c_maxpitch;
 cvar_t	*c_minpitch;
@@ -159,6 +168,19 @@ void DLLEXPORT CAM_Think( void )
 		case CAM_COMMAND_NONE:
 		default:
 			break;
+	}
+
+	// OTS toggle: enter/exit third person when cam_thirdperson_enable changes (edge-triggered,
+	// so the legacy "thirdperson" command keeps working independently). Setting the flag directly
+	// bypasses the multiplayer gate, so it works on local/bot servers too.
+	{
+		static int lastEnable = -1;
+		int en = cam_thirdperson_enable->value ? 1 : 0;
+		if( en != lastEnable )
+		{
+			cam_thirdperson = en;
+			lastEnable = en;
+		}
 	}
 
 	if( !cam_thirdperson )
@@ -363,7 +385,9 @@ void CAM_ToThirdPerson(void)
 	vec3_t viewangles;
 
 #if !defined( _DEBUG )
-	if ( gEngfuncs.GetMaxClients() > 1 )
+	// Valve blocks thirdperson in multiplayer; allow it when cam_allow_multiplayer is set
+	// (e.g. local servers with bots). Defaults to off to keep the original behavior.
+	if ( gEngfuncs.GetMaxClients() > 1 && !( cam_allow_multiplayer && cam_allow_multiplayer->value ) )
 	{
 		// no thirdperson in multiplayer.
 		return;
@@ -392,9 +416,15 @@ void CAM_ToFirstPerson(void)
 }
 
 void CAM_ToggleSnapto( void )
-{ 
+{
 	gEngfuncs.Cvar_SetValue( "cam_snapto", cam_snapto->value ? 0.0 : 1.0 );
 	//cam_snapto->value = !cam_snapto->value;
+}
+
+// Bindable toggle for the over-the-shoulder camera (CAM_Think handles enter/exit).
+void CAM_ThirdPersonToggle( void )
+{
+	gEngfuncs.Cvar_SetValue( "cam_thirdperson_enable", cam_thirdperson_enable->value ? 0.0 : 1.0 );
 }
 
 void CAM_Init( void )
@@ -425,6 +455,16 @@ void CAM_Init( void )
 	cam_idealpitch			= gEngfuncs.pfnRegisterVariable ( "cam_idealpitch", "0", 0 );	 // thirperson pitch
 	cam_idealdist			= gEngfuncs.pfnRegisterVariable ( "cam_idealdist", "64", 0 );	 // thirdperson distance
 	cam_contain				= gEngfuncs.pfnRegisterVariable ( "cam_contain", "0", 0 );	// contain camera to world
+	cam_allow_multiplayer	= gEngfuncs.pfnRegisterVariable ( "cam_allow_multiplayer", "0", FCVAR_ARCHIVE );	// allow thirdperson with bots/multiplayer
+
+	// Over-the-shoulder (Max Payne 3 style) camera
+	gEngfuncs.pfnAddCommand( "cam_thirdperson_toggle", CAM_ThirdPersonToggle );
+	cam_thirdperson_enable	= gEngfuncs.pfnRegisterVariable ( "cam_thirdperson_enable", "0",  FCVAR_ARCHIVE );
+	cam_ots_dist			= gEngfuncs.pfnRegisterVariable ( "cam_ots_dist",          "80", FCVAR_ARCHIVE );
+	cam_ots_side			= gEngfuncs.pfnRegisterVariable ( "cam_ots_side",          "18", FCVAR_ARCHIVE );
+	cam_ots_up				= gEngfuncs.pfnRegisterVariable ( "cam_ots_up",            "4",  FCVAR_ARCHIVE );
+	cam_ots_aim_dist		= gEngfuncs.pfnRegisterVariable ( "cam_ots_aim_dist",      "40", FCVAR_ARCHIVE );
+	cam_ots_aim_fov			= gEngfuncs.pfnRegisterVariable ( "cam_ots_aim_fov",       "0",  FCVAR_ARCHIVE );
 
 	c_maxpitch				= gEngfuncs.pfnRegisterVariable ( "c_maxpitch", "90.0", 0 );
 	c_minpitch				= gEngfuncs.pfnRegisterVariable ( "c_minpitch", "0.0", 0 );
