@@ -1810,10 +1810,19 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 
 	if( cam_thirdperson_enable && cam_thirdperson_enable->value )
 	{
-		// Over-the-shoulder (Max Payne 3 style): camera sits behind+beside the player and
-		// looks where the player aims (viewangles already = cl_viewangles + punch above).
+		// Over-the-shoulder (Max Payne 3 style): camera sits behind+beside the player, but
+		// converges on the player's actual aim point so the screen-center reticle matches
+		// where bullets go. Firing is unchanged (server uses the input angles from the eye);
+		// we only retarget the render camera here, so there is no feedback loop.
 		Vector fwd, right, up;
 		AngleVectors( pparams->viewangles, fwd, right, up );
+
+		// Bullets are fired from the eye (current vieworg) along the aim angles. Trace that
+		// ray to the world/players to find the impact point we want centered on screen.
+		Vector eye = pparams->vieworg;
+		Vector aimEnd = eye + fwd * 8192.0f;
+		pmtrace_t *tr = gEngfuncs.PM_TraceLine( eye, aimEnd, PM_TRACELINE_PHYSENTSONLY, 0, -1 );
+		Vector aimPoint = ( tr && !tr->startsolid && tr->fraction < 1.0f ) ? Vector( tr->endpos ) : aimEnd;
 
 		// Smoothly zoom the camera in while aiming (L2 / +aimassist).
 		static float curDist = 0.0f;
@@ -1823,11 +1832,14 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 		if( lerp < 0.0f ) lerp = 0.0f;
 		curDist += ( target - curDist ) * lerp;
 
-		// Apply the shoulder + height offset to the start point, then trace straight back
-		// (V_GetChaseOrigin keeps the camera out of walls). viewangles is left untouched, so
-		// the camera looks along the player's aim.
-		pparams->vieworg = pparams->vieworg + right * cam_ots_side->value + up * cam_ots_up->value;
-		V_GetChaseOrigin( pparams->viewangles, pparams->vieworg, curDist, pparams->vieworg );
+		// Camera position: behind + shoulder/height offset, kept out of walls.
+		Vector camStart = eye + right * cam_ots_side->value + up * cam_ots_up->value;
+		V_GetChaseOrigin( pparams->viewangles, camStart, curDist, pparams->vieworg );
+
+		// Converge: point the camera at the impact point (reticle == point of impact).
+		Vector look = aimPoint - Vector( pparams->vieworg );
+		VectorAngles( look, pparams->viewangles );
+		pparams->viewangles[PITCH] = -pparams->viewangles[PITCH]; // VectorAngles -> engine pitch
 	}
 	else
 	{

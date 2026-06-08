@@ -199,6 +199,14 @@ static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 	cl_entity_t *best = NULL;
 	bool wallcheck = aim_assist_wallcheck->value != 0.0f;
 
+	// Target anyone we can actually damage. In free-for-all (or with friendly fire on)
+	// teammates are valid targets too, so skip the team filter. These are server cvars,
+	// readable on a listen server; cached lazily since they only exist once a server runs.
+	static cvar_t *ffaCvar = NULL, *ffCvar = NULL;
+	if( !ffaCvar ) ffaCvar = gEngfuncs.pfnGetCvarPointer( "mp_freeforall" );
+	if( !ffCvar )  ffCvar  = gEngfuncs.pfnGetCvarPointer( "mp_friendlyfire" );
+	bool everyoneEnemy = ( ffaCvar && ffaCvar->value != 0.0f ) || ( ffCvar && ffCvar->value != 0.0f );
+
 	g_iAimAssistNearestIdx = 0;
 	g_flAimAssistNearestAngle = 0.0f;
 
@@ -226,8 +234,8 @@ static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 			continue;
 		if( e->curstate.solid == SOLID_NOT || g_PlayerExtraInfo[i].dead )
 			continue; // dead / non-solid
-		if( g_iTeamNumber != 0 && g_PlayerExtraInfo[i].teamnumber == g_iTeamNumber )
-			continue; // teammate (skip filter in FFA where team is 0)
+		if( !everyoneEnemy && g_iTeamNumber != 0 && g_PlayerExtraInfo[i].teamnumber == g_iTeamNumber )
+			continue; // teammate (only skip when we can't damage them)
 
 		vec3_t dir;
 		VectorSubtract( e->curstate.origin, eye, dir );
