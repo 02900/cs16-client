@@ -63,7 +63,6 @@ bool bMouseInUse = false;
 
 extern Vector dead_viewangles;
 extern bool evdev_open;
-extern vec3_t v_origin; // actual camera/eye origin, set each frame in view.cpp
 
 #define F 1U<<0	// Forward
 #define B 1U<<1	// Back
@@ -220,6 +219,11 @@ static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 		cl_entity_t *e = gEngfuncs.GetEntityByIndex( i );
 		if( !e || !e->player )
 			continue;
+		// Skip stale "ghost" entities: a player who left our PVS keeps its last-known
+		// curstate (old origin, solid still set) but stops being updated. Entities refreshed
+		// this frame share the local player's messagenum; mismatched ones are stale.
+		if( local && e->curstate.messagenum != local->curstate.messagenum )
+			continue;
 		if( e->curstate.solid == SOLID_NOT || g_PlayerExtraInfo[i].dead )
 			continue; // dead / non-solid
 		if( g_iTeamNumber != 0 && g_PlayerExtraInfo[i].teamnumber == g_iTeamNumber )
@@ -328,15 +332,21 @@ void IN_Move( float frametime, usercmd_t *cmd )
 	// Everything below runs only when the feature is on, so the default path is untouched.
 	bool aaEnabled = aim_assist->value && !CL_IsDead()
 		&& !( gHUD.m_MOTD.cl_hide_motd->value == 0.0f && gHUD.m_MOTD.m_bShow );
-	if( aaEnabled )
+	cl_entity_t *local = aaEnabled ? gEngfuncs.GetLocalPlayer() : NULL;
+	if( local )
 	{
-		// store the view basis so the debug cone can be drawn
-		VectorCopy( v_origin, g_vecAimEye );
+		// Eye = the player's real shooting origin (origin + view offset), like the weapons use.
+		// This is camera-independent, so it stays correct in third person (v_origin would be
+		// the orbit camera there) and respects ducking via the predicted view height.
+		vec3_t viewofs = { 0, 0, 0 };
+		gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( viewofs );
+		g_vecAimEye[0] = local->origin[0] + viewofs[0];
+		g_vecAimEye[1] = local->origin[1] + viewofs[1];
+		g_vecAimEye[2] = local->origin[2] + viewofs[2];
 		AngleVectors( viewangles, g_vecAimFwd, g_vecAimRight, g_vecAimUp );
 
 		// scan when steering (key held) OR when a debug/highlight view wants the target
-		cl_entity_t *local = gEngfuncs.GetLocalPlayer();
-		if( local && ( g_bAimAssistKey || aim_assist_debug->value || aim_assist_highlight->value ) )
+		if( g_bAimAssistKey || aim_assist_debug->value || aim_assist_highlight->value )
 		{
 			aaTarget = AimAssist_FindTarget( g_vecAimEye, g_vecAimFwd );
 			if( aaTarget )
