@@ -12,6 +12,9 @@ aimassist.cpp -- debug overlay + target highlight for the gamepad aim assist
 #include "cl_entity.h"
 #include "aimassist.h"
 
+#define AA_CONE_DRAW_DIST	300.0f	// distance along view rays where cone dots are projected
+#define AA_HEAD_OFFSET		40.0f	// height above the entity origin for the head marker
+
 // Project a world point to screen pixels. Returns false if behind the viewer.
 static bool AA_Project( float *world, int &sx, int &sy )
 {
@@ -37,7 +40,7 @@ int CHudAimAssist::VidInit( void )
 
 int CHudAimAssist::Draw( float flTime )
 {
-	if( !aim_assist_debug || !aim_assist_debug->value )
+	if( !aim_assist_debug->value )
 		return 1;
 
 	int lh = gHUD.m_iFontHeight + 1;
@@ -52,7 +55,7 @@ int CHudAimAssist::Draw( float flTime )
 	y += lh;
 
 	snprintf( line, sizeof( line ), "enabled: %s   key: %s",
-		( aim_assist && aim_assist->value ) ? "ON" : "OFF",
+		aim_assist->value ? "ON" : "OFF",
 		g_bAimAssistKey ? "HELD" : "released" );
 	DrawUtils::DrawHudString( x, y, ScreenWidth, line, 255, 255, 255 );
 	y += lh;
@@ -72,7 +75,7 @@ int CHudAimAssist::Draw( float flTime )
 
 	if( g_iAimAssistNearestIdx )
 		snprintf( line, sizeof( line ), "nearest enemy: %.1f deg (lock_fov %.0f)",
-			g_flAimAssistNearestAngle, aim_assist_lock_fov ? aim_assist_lock_fov->value : 0.0f );
+			g_flAimAssistNearestAngle, aim_assist_lock_fov->value );
 	else
 		snprintf( line, sizeof( line ), "nearest enemy: none (team/alive/range)" );
 	DrawUtils::DrawHudString( x, y, ScreenWidth, line, 200, 200, 200 );
@@ -88,12 +91,12 @@ int CHudAimAssist::Draw( float flTime )
 		vec3_t p;
 		int px, py;
 		for( int j = 0; j < 3; j++ )
-			p[j] = g_vecAimEye[j] + g_vecAimFwd[j] * 300.0f;
+			p[j] = g_vecAimEye[j] + g_vecAimFwd[j] * AA_CONE_DRAW_DIST;
 		if( AA_Project( p, px, py ) )
 			FillRGBA( px - 3, py - 3, 6, 6, 255, 0, 255, 255 );
 
 		// cone edge ring at the acquisition fov, projected into the world
-		float fov = aim_assist_lock_fov ? aim_assist_lock_fov->value : 45.0f;
+		float fov = aim_assist_lock_fov->value;
 		float cf = cos( DEG2RAD( fov ) ), sf = sin( DEG2RAD( fov ) );
 		for( int k = 0; k < 24; k++ )
 		{
@@ -104,7 +107,7 @@ int CHudAimAssist::Draw( float flTime )
 			for( int j = 0; j < 3; j++ )
 			{
 				dir[j] = g_vecAimFwd[j] * cf + ( g_vecAimRight[j] * ca + g_vecAimUp[j] * sa ) * sf;
-				q[j]   = g_vecAimEye[j] + dir[j] * 300.0f;
+				q[j]   = g_vecAimEye[j] + dir[j] * AA_CONE_DRAW_DIST;
 			}
 			if( AA_Project( q, qx, qy ) )
 				FillRGBA( qx - 1, qy - 1, 3, 3, 0, 200, 255, 220 );
@@ -128,7 +131,7 @@ int CHudAimAssist::Draw( float flTime )
 		{
 			vec3_t head, screen;
 			VectorCopy( t->origin, head );
-			head[2] += 40.0f; // approx. above the head
+			head[2] += AA_HEAD_OFFSET; // approx. above the head
 
 			// WorldToScreen returns non-zero when the point is behind the viewer
 			if( gEngfuncs.pTriAPI->WorldToScreen( head, screen ) == 0 )

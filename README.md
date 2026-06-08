@@ -49,6 +49,18 @@ After that, just install the APK and run.
 | xhair_size               | 4             | 0   | -   | Crosshair size.                                                                             |
 | xhair_t                  | 0             | 0   | 1   | Enables T-shaped crosshair.                                                                 |
 | xhair_thick              | 0             | 0   | -   | Crosshair thickness.                                                                        |
+| aim_assist               | 0             | 0   | 1   | Master switch for the gamepad aim assist (soft-lock).                                       |
+| aim_assist_lock_fov      | 45            | 0   | -   | Acquisition cone half-angle (deg) while the aim button is held.                             |
+| aim_assist_pull          | 0.25          | 0   | 1   | Magnetism strength: how strongly the crosshair is pulled to the target.                     |
+| aim_assist_slow          | 0.4           | 0   | 1   | Sticky slowdown: stick/look sensitivity multiplier while on a target.                       |
+| aim_assist_range         | 1500          | 0   | -   | Maximum target distance, in units.                                                          |
+| aim_assist_wallcheck     | 1             | 0   | 1   | Require line of sight (no wall) to the target.                                              |
+| aim_assist_debug         | 0             | 0   | 1   | Debug overlay: text, view cone, markers and target glow.                                    |
+| aim_assist_highlight     | 0             | 0   | 1   | Glow shell over the current target's model.                                                 |
+| aim_assist_highlight_color | "0 255 0"   | -   | -   | Glow color in RGB.                                                                          |
+| aim_assist_highlight_amt | 75            | 0   | 255 | Glow shell thickness/intensity.                                                             |
+
+To use it: bind a key/gamepad button to `+aimassist` (it also appears in Options → Controls as "Aim Assist"), set `aim_assist 1`, then hold the button to pull aim onto the nearest target.
 
 ## Building
 Clone the source code:

@@ -8,6 +8,7 @@
 // Client side entity management functions
 
 #include <memory.h>
+#include <stdio.h>
 
 #include "hud.h"
 #include "pm_defs.h"
@@ -51,14 +52,15 @@ int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *mode
 		// aim assist: glow shell over the highlighted target.
 		// Enabled by either the dedicated highlight cvar or the master debug cvar.
 		if( ent->player && g_iAimAssistTarget && ent->index == g_iAimAssistTarget
-			&& ( ( aim_assist_highlight && aim_assist_highlight->value )
-			  || ( aim_assist_debug && aim_assist_debug->value ) ) )
+			&& ( aim_assist_highlight->value || aim_assist_debug->value ) )
 		{
+			int r = 0, g = 255, b = 0;
+			sscanf( aim_assist_highlight_color->string, "%d %d %d", &r, &g, &b );
 			ent->curstate.renderfx      = kRenderFxGlowShell;
-			ent->curstate.rendercolor.r = 0;
-			ent->curstate.rendercolor.g = 255;
-			ent->curstate.rendercolor.b = 0;
-			ent->curstate.renderamt     = 75; // shell thickness
+			ent->curstate.rendercolor.r = r;
+			ent->curstate.rendercolor.g = g;
+			ent->curstate.rendercolor.b = b;
+			ent->curstate.renderamt     = (int)aim_assist_highlight_amt->value; // shell thickness
 		}
 		break;
 	case ET_BEAM:

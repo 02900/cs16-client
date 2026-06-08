@@ -23,7 +23,8 @@ extern vec3_t g_vecAimUp;    // view up
 extern cvar_t *aim_assist;            // master on/off (shown in the overlay)
 extern cvar_t *aim_assist_debug;      // text overlay + floating head marker
 extern cvar_t *aim_assist_highlight;  // glow shell over the target model
-extern cvar_t *aim_assist_fov;        // legacy tight cone
+extern cvar_t *aim_assist_highlight_color; // glow color "r g b"
+extern cvar_t *aim_assist_highlight_amt;   // glow shell thickness/intensity
 extern cvar_t *aim_assist_lock_fov;   // acquisition cone (shown in the overlay / drawn as the ring)
 
 class CHudAimAssist : public CHudBase
