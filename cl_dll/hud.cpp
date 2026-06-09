@@ -404,6 +404,7 @@ void CHud :: Init( void )
 	m_Radar.Init();
 	m_Scenario.Init();
 	m_AimAssist.Init();
+	m_PlayerNames.Init();
 
 	// chat, death notice, status bars and other
 	m_SayText.Init();
