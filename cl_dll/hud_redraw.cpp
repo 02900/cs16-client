@@ -98,6 +98,27 @@ int CHud :: Redraw( float flTime, int intermission )
 		m_flShotTime = 0;
 	}
 
+	// On match end (intermission), return to the main menu (lobby) instead of changing map.
+	// Toggle with cl_endmatch_lobby (default 1). On a listen server, disconnecting shuts the
+	// server down and drops the host back to the menu (cancels the pending map change).
+	static cvar_t *cl_endmatch_lobby = NULL;
+	if( !cl_endmatch_lobby )
+		cl_endmatch_lobby = gEngfuncs.pfnRegisterVariable( "cl_endmatch_lobby", "1", FCVAR_ARCHIVE );
+
+	static float s_lobbyReturnTime = 0.0f;
+	if( intermission && !m_iIntermission )       // just entered intermission (match over)
+	{
+		if( cl_endmatch_lobby->value )
+			s_lobbyReturnTime = flTime + 5.0f;   // show the final scoreboard briefly, then leave
+	}
+	if( !intermission )
+		s_lobbyReturnTime = 0.0f;
+	if( s_lobbyReturnTime != 0.0f && flTime >= s_lobbyReturnTime )
+	{
+		s_lobbyReturnTime = 0.0f;
+		gEngfuncs.pfnClientCmd( "disconnect\n" );
+	}
+
 	m_iIntermission = intermission;
 
 	UpdateDefaultHUDColor();
