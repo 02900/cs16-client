@@ -284,6 +284,8 @@ int CHudAmmo::Init(void)
 	m_pClCrosshairTranslucent = (convar_t*)CVAR_CREATE( "cl_crosshair_translucent", "1", FCVAR_ARCHIVE );
 	m_pClCrosshairSize = (convar_t*)CVAR_CREATE( "cl_crosshair_size", "auto", FCVAR_ARCHIVE );
 	m_pClDynamicCrosshair = CVAR_CREATE("cl_dynamiccrosshair", "1", FCVAR_ARCHIVE);
+	m_pClMp3Crosshair = CVAR_CREATE("cl_crosshair_mp3", "1", FCVAR_ARCHIVE);
+	m_iMp3CrossRing = m_iMp3CrossDot = 0;
 
 	m_hStaticSpr = 0;
 
@@ -350,6 +352,14 @@ int CHudAmmo::VidInit(void)
 
 	giABWidth = 20;
 	giABHeight = 4;
+
+	// Max Payne 3 crosshair textures (optional; 0 -> default crosshair is used)
+	if( g_iXash )
+	{
+		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
+		m_iMp3CrossRing = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_ring.png", NULL, 0, f );
+		m_iMp3CrossDot  = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_dot.png",  NULL, 0, f );
+	}
 
 	return 1;
 }
@@ -1592,6 +1602,30 @@ void CHudAmmo::DrawCrosshair()
 
 	if ( g_iWeaponFlags & WPNSTATE_SHIELD_DRAWN )
 		return;
+
+	// Max Payne 3 crosshair: a thin ring + center dot at screen center (replaces the dynamic
+	// lines). Scoped weapons returned above, so this only affects hip-fire weapons.
+	if ( m_pClMp3Crosshair && m_pClMp3Crosshair->value && g_iXash && m_iMp3CrossRing
+	     && !( gHUD.m_iHideHUDDisplay & 1 ) )
+	{
+		int cx = ScreenWidth / 2;
+		int cy = ScreenHeight / 2;
+		int rs = XRES( 7 );  // ring half-size
+		int ds = XRES( 1 );  // dot half-size
+
+		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+		gEngfuncs.pTriAPI->Color4ub( 255, 255, 255, 235 );
+		gRenderAPI.GL_Bind( 0, m_iMp3CrossRing );
+		DrawUtils::Draw2DQuad( cx - rs, cy - rs, cx + rs, cy + rs );
+		if ( m_iMp3CrossDot )
+		{
+			gRenderAPI.GL_Bind( 0, m_iMp3CrossDot );
+			DrawUtils::Draw2DQuad( cx - ds, cy - ds, cx + ds, cy + ds );
+		}
+		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+		return;
+	}
 
 	if ( weaponid <= 30 )
 	{

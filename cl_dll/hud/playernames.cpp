@@ -119,16 +119,17 @@ int CHudPlayerNames::Draw( float flTime )
 		int len = DrawUtils::HudStringLen( name );
 		DrawUtils::DrawHudString( sx - len / 2, sy, ScreenWidth, name, r, g, b );
 
-		// health bar below the name (sb_health is -1 when the server hides it)
+		// thin health bar right under the name, as wide as the name (Max Payne 3 underline look).
 		int h = g_PlayerExtraInfo[i].sb_health;
 		if( h > 0 )
 		{
 			if( h > 100 ) h = 100;
-			int bw = XRES( 44 ), bh = YRES( 4 );
+			int bw = len < XRES( 18 ) ? XRES( 18 ) : len;
+			int bh = YRES( 2 );
 			int bx = sx - bw / 2;
-			int by = sy + gHUD.m_iFontHeight + 1;
-			FillRGBA( bx - 1, by - 1, bw + 2, bh + 2, 0, 0, 0, 180 );
-			FillRGBA( bx, by, ( bw * h ) / 100, bh, r, g, b, 230 );
+			int by = sy + gHUD.m_iFontHeight;
+			FillRGBA( bx - 1, by - 1, bw + 2, bh + 2, 0, 0, 0, 160 );
+			FillRGBA( bx, by, ( bw * h ) / 100, bh, r, g, b, 220 );
 		}
 	}
 

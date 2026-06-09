@@ -49,6 +49,15 @@ static float RadarScale()
 	return 32.0f / z;
 }
 
+// Overall radar size multiplier over the native CS radar sprite (Max Payne 3 has a big radar).
+static cvar_t *cl_radar_size = NULL;
+static float RadarSizeMul()
+{
+	float s = ( cl_radar_size && cl_radar_size->value > 0.25f ) ? cl_radar_size->value : 1.0f;
+	if( s > 4.0f ) s = 4.0f;
+	return s;
+}
+
 static byte	r_RadarCross[8][8] =
 {
 {1,1,0,0,0,0,1,1},
@@ -104,6 +113,7 @@ int CHudRadar::Init()
 
 	cl_radartype = CVAR_CREATE( "cl_radartype", "0", FCVAR_ARCHIVE );
 	cl_radar_zoom = CVAR_CREATE( "cl_radar_zoom", "2.5", FCVAR_ARCHIVE );
+	cl_radar_size = CVAR_CREATE( "cl_radar_size", "1.8", FCVAR_ARCHIVE );
 
 	bTexturesInitialized = bUseRenderAPI = false;
 
@@ -190,7 +200,8 @@ void CHudRadar::Shutdown( void )
 	}
 	if( m_iRingTex )   gRenderAPI.GL_FreeTexture( m_iRingTex );
 	if( m_iPlayerTex ) gRenderAPI.GL_FreeTexture( m_iPlayerTex );
-	m_iRingTex = m_iPlayerTex = 0;
+	if( m_iBlipTex )   gRenderAPI.GL_FreeTexture( m_iBlipTex );
+	m_iRingTex = m_iPlayerTex = m_iBlipTex = 0;
 }
 
 void CHudRadar::InitHUDData( void )
@@ -213,12 +224,13 @@ int CHudRadar::VidInit(void)
 
 	// Max Payne 3 radar art (imported via scripts/import_mp3_assets.py). Optional: if the
 	// files aren't present GL_LoadTexture returns 0 and we fall back to procedural drawing.
-	m_iRingTex = m_iPlayerTex = 0;
+	m_iRingTex = m_iPlayerTex = m_iBlipTex = 0;
 	if( bUseRenderAPI )
 	{
 		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
 		m_iRingTex   = gRenderAPI.GL_LoadTexture( "gfx/mp3/radar_ring.png",   NULL, 0, f );
 		m_iPlayerTex = gRenderAPI.GL_LoadTexture( "gfx/mp3/radar_player.png", NULL, 0, f );
+		m_iBlipTex   = gRenderAPI.GL_LoadTexture( "gfx/mp3/radar_blip.png",   NULL, 0, f );
 	}
 	return 1;
 }
@@ -322,8 +334,10 @@ int CHudRadar::Draw(float flTime)
 	// Anchor the radar to the bottom-left corner (Max Payne 3 layout). All radar drawing
 	// below is offset by (m_iRadarX, m_iRadarY). Leave a little room under it for the
 	// location label.
+	// Scale the whole radar (minimap, dots, ring, pointer all key off iMaxRadius).
+	iMaxRadius = (int)( ( m_hRadar.rect.Width() / 2.0f ) * RadarSizeMul() );
 	m_iRadarX = 0;
-	m_iRadarY = ScreenHeight - m_hRadarOpaque.rect.Height() - YRES( 26 );
+	m_iRadarY = ScreenHeight - 2 * iMaxRadius - YRES( 26 );
 
 	// Max Payne 3: draw the level geometry minimap (gray walls) when the map has an overview;
 	// otherwise fall back to the classic translucent radar circle.
@@ -457,7 +471,7 @@ int CHudRadar::Draw(float flTime)
 		DrawMiniMapFrame();
 	DrawPlayerArrow();
 
-	DrawPlayerLocation( m_iRadarY + m_hRadarOpaque.rect.Height() + 4 );
+	DrawPlayerLocation( m_iRadarY + 2 * iMaxRadius + 4 );
 
 	return 0;
 }
@@ -503,6 +517,21 @@ inline void CHudRadar::DrawColoredTexture( int x, int y, int size, byte r, byte 
 
 void CHudRadar::DrawRadarDot( int x, int y, int r, int g, int b, int a )
 {
+	// Max Payne 3 blip texture, tinted by team color (red enemy / white teammate).
+	if( bUseRenderAPI && m_iBlipTex )
+	{
+		int cx = m_iRadarX + iMaxRadius + x;
+		int cy = m_iRadarY + iMaxRadius + y;
+		int bs = XRES( 3 );
+		gRenderAPI.GL_Bind( 0, m_iBlipTex );
+		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+		gEngfuncs.pTriAPI->Color4ub( r, g, b, a );
+		DrawUtils::Draw2DQuad( cx - bs, cy - bs, cx + bs, cy + bs );
+		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+		return;
+	}
+
 	const int size = 1;
 	if( bUseRenderAPI )
 	{

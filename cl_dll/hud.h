@@ -237,6 +237,11 @@ private:
 	cvar_t *m_pHud_FastSwitch;
 	cvar_t *m_pHud_DrawHistory_Time;
 
+	// Max Payne 3 crosshair (ring + dot textures, imported via import_mp3_assets.py)
+	cvar_t *m_pClMp3Crosshair;
+	int m_iMp3CrossRing;
+	int m_iMp3CrossDot;
+
 	// replace buggy engine's crosshair
 	HSPRITE m_hStaticSpr;
 	wrect_t m_rcStaticRc;
