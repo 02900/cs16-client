@@ -49,10 +49,19 @@ private:
 	Vector WorldToRadar(const Vector vPlayerOrigin, const Vector vObjectOrigin, const Vector vAngles );
 	inline void DrawColoredTexture( int x, int y, int size, byte r, byte g, byte b, byte a, int texHandle );
 
+	// Max Payne 3 minimap: draw the level overview geometry inside the radar when available.
+	bool UpdateMiniMap();                                         // (re)load overview on map change
+	bool DrawMiniMap();                                           // draw it; false if unavailable
+	void WorldToMini( float wx, float wy, float cy, float sy, float &px, float &py );
+	void DrawMiniMapFrame();                                      // dark circular border around the map
+	void DrawPlayerArrow();                                       // white pointer for the local player (center)
+
 	bool bUseRenderAPI, bTexturesInitialized;
 	int hCross, hT, hFlippedT;
 	int iMaxRadius;
 	int m_iRadarX, m_iRadarY; // top-left anchor of the radar box (Max Payne 3: bottom-left)
+	struct model_s *m_pMiniMap;   // overview map sprite (tiled), NULL if none for this map
+	char m_szMiniLevel[64];       // level the overview was loaded for (change detection)
 };
 
 #endif // RADAR_H

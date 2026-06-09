@@ -101,29 +101,21 @@ int CHudDeathNotice :: Draw( float flTime )
 		//if ( gViewPort && gViewPort->AllowedToPrintText() )
 		//if ( !gHUD.m_iNoConsolePrint )
 		{
-			// Draw the death notice
-			if( !g_iUser1 )
-			{
-				y = YRES(DEATHNOTICE_TOP) + 2 + (20 * i);  //!!!
-			}
-			else
-			{
-				y = ScreenHeight / 5 + 2 + (20 * i);
-			}
+			// Max Payne 3: kill feed sits ABOVE the radar (bottom-left), left-aligned and
+			// stacked upward. Anchor to the real radar sprite height so it clears it at any res.
+			int radarH = gHUD.m_Radar.m_hRadarOpaque.rect.Height();
+			y = ScreenHeight - radarH - YRES( 26 ) - YRES( 8 ) - (20 * i);
 
 			int id = (rgDeathNoticeList[i].iId == -1) ? m_HUD_d_skull : rgDeathNoticeList[i].iId;
-			x = ScreenWidth - DrawUtils::ConsoleStringLen(rgDeathNoticeList[i].szVictim) - (gHUD.GetSpriteRect(id).Width());
-			if( rgDeathNoticeList[i].iHeadShotId )
-				x -= gHUD.GetSpriteRect(m_HUD_d_headshot).Width();
+			x = XRES( 8 );
 
+			// Draw killers name (left)
 			if ( !rgDeathNoticeList[i].bSuicide )
 			{
-				x -= (5 + DrawUtils::ConsoleStringLen( rgDeathNoticeList[i].szKiller ) );
-
-				// Draw killers name
 				if ( rgDeathNoticeList[i].KillerColor )
 					DrawUtils::SetConsoleTextColor( rgDeathNoticeList[i].KillerColor[0], rgDeathNoticeList[i].KillerColor[1], rgDeathNoticeList[i].KillerColor[2] );
-				x = 5 + DrawUtils::DrawConsoleString( x, y, rgDeathNoticeList[i].szKiller );
+				x = DrawUtils::DrawConsoleString( x, y, rgDeathNoticeList[i].szKiller );
+				x += 5;
 			}
 
 			r = 255;  g = 80;	b = 0;
