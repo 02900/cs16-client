@@ -52,6 +52,7 @@ private:
 	bool bUseRenderAPI, bTexturesInitialized;
 	int hCross, hT, hFlippedT;
 	int iMaxRadius;
+	int m_iRadarX, m_iRadarY; // top-left anchor of the radar box (Max Payne 3: bottom-left)
 };
 
 #endif // RADAR_H

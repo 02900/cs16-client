@@ -289,15 +289,21 @@ int CHudRadar::Draw(float flTime)
 	int iTeamNumber = g_PlayerExtraInfo[ gHUD.m_Scoreboard.m_iPlayerNum ].teamnumber;
 	int r, g, b;
 
+	// Anchor the radar to the bottom-left corner (Max Payne 3 layout). All radar drawing
+	// below is offset by (m_iRadarX, m_iRadarY). Leave a little room under it for the
+	// location label.
+	m_iRadarX = 0;
+	m_iRadarY = ScreenHeight - m_hRadarOpaque.rect.Height() - YRES( 26 );
+
 	if( cl_radartype->value )
 	{
 		SPR_Set(m_hRadarOpaque.spr, 200, 200, 200);
-		SPR_DrawHoles(0, 0, 0, &m_hRadarOpaque.rect);
+		SPR_DrawHoles(0, m_iRadarX, m_iRadarY, &m_hRadarOpaque.rect);
 	}
 	else
 	{
 		SPR_Set( m_hRadar.spr, 25, 75, 25 );
-		SPR_DrawAdditive( 0, 0, 0, &m_hRadarOpaque.rect );
+		SPR_DrawAdditive( 0, m_iRadarX, m_iRadarY, &m_hRadarOpaque.rect );
 	}
 
 	if( bUseRenderAPI )
@@ -380,7 +386,7 @@ int CHudRadar::Draw(float flTime)
 		}
 	}
 
-	DrawPlayerLocation( ( m_hRadarOpaque.rect.Height() ) + 10 );
+	DrawPlayerLocation( m_iRadarY + m_hRadarOpaque.rect.Height() + 4 );
 
 	return 0;
 }
@@ -415,10 +421,10 @@ inline void CHudRadar::DrawColoredTexture( int x, int y, int size, byte r, byte 
 	// gEngfuncs.pTriAPI->Begin( TRI_QUADS );
 
 	gEngfuncs.pTriAPI->Color4ub( r, g, b, a );
-	DrawUtils::Draw2DQuad( (iMaxRadius + x - size * 2) * gHUD.m_flScale,
-						   (iMaxRadius + y - size * 2) * gHUD.m_flScale,
-						   (iMaxRadius + x + size * 2) * gHUD.m_flScale,
-						   (iMaxRadius + y + size * 2) * gHUD.m_flScale);
+	DrawUtils::Draw2DQuad( (m_iRadarX + iMaxRadius + x - size * 2) * gHUD.m_flScale,
+						   (m_iRadarY + iMaxRadius + y - size * 2) * gHUD.m_flScale,
+						   (m_iRadarX + iMaxRadius + x + size * 2) * gHUD.m_flScale,
+						   (m_iRadarY + iMaxRadius + y + size * 2) * gHUD.m_flScale);
 	
 	// gEngfuncs.pTriAPI->End();
 }
@@ -433,7 +439,7 @@ void CHudRadar::DrawRadarDot( int x, int y, int r, int g, int b, int a )
 	}
 	else
 	{
-		FillRGBA(iMaxRadius + x - size*2, iMaxRadius + y - size*2, size*4, size*4, r, g, b, a);
+		FillRGBA(m_iRadarX + iMaxRadius + x - size*2, m_iRadarY + iMaxRadius + y - size*2, size*4, size*4, r, g, b, a);
 	}
 }
 
@@ -447,11 +453,11 @@ void CHudRadar::DrawCross( int x, int y, int r, int g, int b, int a )
 	}
 	else
 	{
-		FillRGBA(iMaxRadius + x, iMaxRadius + y, size, size, r, g, b, a);
-		FillRGBA(iMaxRadius + x - size, iMaxRadius + y - size, size, size, r, g, b, a);
-		FillRGBA(iMaxRadius + x - size, iMaxRadius + y + size, size, size, r, g, b, a);
-		FillRGBA(iMaxRadius + x + size, iMaxRadius + y - size, size, size, r, g, b, a);
-		FillRGBA(iMaxRadius + x + size, iMaxRadius + y + size, size, size, r, g, b, a);
+		FillRGBA(m_iRadarX + iMaxRadius + x, m_iRadarY + iMaxRadius + y, size, size, r, g, b, a);
+		FillRGBA(m_iRadarX + iMaxRadius + x - size, m_iRadarY + iMaxRadius + y - size, size, size, r, g, b, a);
+		FillRGBA(m_iRadarX + iMaxRadius + x - size, m_iRadarY + iMaxRadius + y + size, size, size, r, g, b, a);
+		FillRGBA(m_iRadarX + iMaxRadius + x + size, m_iRadarY + iMaxRadius + y - size, size, size, r, g, b, a);
+		FillRGBA(m_iRadarX + iMaxRadius + x + size, m_iRadarY + iMaxRadius + y + size, size, size, r, g, b, a);
 	}
 }
 
@@ -465,8 +471,8 @@ void CHudRadar::DrawT( int x, int y, int r, int g, int b, int a )
 	}
 	else
 	{
-		FillRGBA( iMaxRadius + x - size, iMaxRadius + y - size, size * 3, size, r, g, b, a);
-		FillRGBA( iMaxRadius + x, iMaxRadius + y, size, size * 2, r, g, b, a);
+		FillRGBA( m_iRadarX + iMaxRadius + x - size, m_iRadarY + iMaxRadius + y - size, size * 3, size, r, g, b, a);
+		FillRGBA( m_iRadarX + iMaxRadius + x, m_iRadarY + iMaxRadius + y, size, size * 2, r, g, b, a);
 	}
 }
 
@@ -479,8 +485,8 @@ void CHudRadar::DrawFlippedT( int x, int y, int r, int g, int b, int a )
 	}
 	else
 	{
-		FillRGBA( iMaxRadius + x, iMaxRadius + y - size, size, size*2, r, g, b, a);
-		FillRGBA( iMaxRadius + x - size, iMaxRadius + y + size, size*3, size, r, g, b, a);
+		FillRGBA( m_iRadarX + iMaxRadius + x, m_iRadarY + iMaxRadius + y - size, size, size*2, r, g, b, a);
+		FillRGBA( m_iRadarX + iMaxRadius + x - size, m_iRadarY + iMaxRadius + y + size, size*3, size, r, g, b, a);
 	}
 }
 

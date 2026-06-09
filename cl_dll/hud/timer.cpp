@@ -91,7 +91,8 @@ int CHudTimer::Draw( float fTime )
 	int totalWidth = iWatchWidth + 2 * iDigitWidth + iColonWidth + 2 * iDigitWidth;
 
 	int x = (ScreenWidth - totalWidth) / 2;
-	int y = ScreenHeight - 1.5 * gHUD.m_iFontHeight;
+	int xStart = x;                  // left edge of the clock (for the score on the left)
+	int y = YRES( 10 );              // top-center, Max Payne 3 style
 
 	SPR_Set(gHUD.GetSprite(m_HUD_timer), r, g, b);
 	SPR_DrawAdditive(0, x, y, &gHUD.GetSpriteRect(m_HUD_timer));
@@ -110,6 +111,37 @@ int CHudTimer::Draw( float fTime )
 	x += iColonWidth;
 
 	m_right = DrawUtils::DrawHudNumber2(x, y, true, 2, seconds, r, g, b);
+
+	// --- score next to the timer (Max Payne 3 style) ---
+	// FFA: your own frags on the left. Teams: your team score (left) and the enemy's (right, red).
+	static cvar_t *aa_ffa = NULL;
+	if( !aa_ffa ) aa_ffa = gEngfuncs.pfnGetCvarPointer( "mp_freeforall" );
+
+	int sr, sg, sb;
+	DrawUtils::UnpackRGB( sr, sg, sb, gHUD.m_iDefaultHUDColor );
+	int gap = iDigitWidth;
+
+	if( aa_ffa && aa_ffa->value != 0.0f )
+	{
+		int frags = g_PlayerExtraInfo[gHUD.m_Scoreboard.m_iPlayerNum].frags;
+		int w = DrawUtils::GetNumWidth( frags, DHN_DRAWZERO );
+		DrawUtils::DrawHudNumber2( xStart - gap - w * iDigitWidth, y, true, w, frags, sr, sg, sb );
+	}
+	else
+	{
+		// Sum player frags per team every frame. g_TeamInfo[].frags is only refreshed while the
+		// scoreboard (Tab) is open, so it can't be used here; g_PlayerExtraInfo[].frags updates live.
+		int myScore = 0, enemyScore = 0;
+		for( int i = 1; i <= MAX_PLAYERS; i++ )
+		{
+			int tn = g_PlayerExtraInfo[i].teamnumber;
+			if( tn == g_iTeamNumber )            myScore += g_PlayerExtraInfo[i].frags;
+			else if( tn == 1 || tn == 2 )        enemyScore += g_PlayerExtraInfo[i].frags;
+		}
+		int wl = DrawUtils::GetNumWidth( myScore, DHN_DRAWZERO );
+		DrawUtils::DrawHudNumber2( xStart - gap - wl * iDigitWidth, y, true, wl, myScore, sr, sg, sb );
+		DrawUtils::DrawHudNumber2( m_right + gap, y, true, DrawUtils::GetNumWidth( enemyScore, DHN_DRAWZERO ), enemyScore, 250, 60, 60 );
+	}
 
 	return 1;
 }

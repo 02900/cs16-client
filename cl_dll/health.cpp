@@ -281,13 +281,16 @@ void CHudHealth::DrawHealthBar( float flTime )
 		HealthWidth = gHUD.GetSpriteRect(gHUD.m_HUD_number_0).Width();
 		int CrossWidth = gHUD.GetSpriteRect(m_HUD_cross).Width();
 
-		y = ScreenHeight - gHUD.m_iFontHeight - gHUD.m_iFontHeight / 2;
-		x = CrossWidth /2;
+		// Max Payne 3 layout: health at the bottom-right, on a line above the ammo.
+		int clusterW = CrossWidth + 3 * HealthWidth;
+		int xBase = ScreenWidth - XRES( 20 ) - clusterW;
+		y = ScreenHeight - 3 * gHUD.m_iFontHeight - gHUD.m_iFontHeight / 2;
+		x = xBase;
 
 		SPR_Set(gHUD.GetSprite(m_HUD_cross), r, g, b);
 		SPR_DrawAdditive(0, x, y, &gHUD.GetSpriteRect(m_HUD_cross));
 
-		x = CrossWidth + HealthWidth / 2;
+		x = xBase + CrossWidth;
 
 		int idx = gEngfuncs.GetLocalPlayer()->index;
 
