@@ -62,6 +62,8 @@ private:
 	int m_iRadarX, m_iRadarY; // top-left anchor of the radar box (Max Payne 3: bottom-left)
 	struct model_s *m_pMiniMap;   // overview map sprite (tiled), NULL if none for this map
 	char m_szMiniLevel[64];       // level the overview was loaded for (change detection)
+	int m_iRingTex;               // gfx/mp3/radar_ring.png (0 = use procedural frame)
+	int m_iPlayerTex;             // gfx/mp3/radar_player.png (0 = use procedural arrow)
 };
 
 #endif // RADAR_H

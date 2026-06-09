@@ -188,6 +188,9 @@ void CHudRadar::Shutdown( void )
 		gRenderAPI.GL_FreeTexture( hFlippedT );
 		gRenderAPI.GL_FreeTexture( hCross );
 	}
+	if( m_iRingTex )   gRenderAPI.GL_FreeTexture( m_iRingTex );
+	if( m_iPlayerTex ) gRenderAPI.GL_FreeTexture( m_iPlayerTex );
+	m_iRingTex = m_iPlayerTex = 0;
 }
 
 void CHudRadar::InitHUDData( void )
@@ -207,6 +210,16 @@ int CHudRadar::VidInit(void)
 	// force the overview minimap to (re)load for the new map on next Draw
 	m_pMiniMap = NULL;
 	m_szMiniLevel[0] = 0;
+
+	// Max Payne 3 radar art (imported via scripts/import_mp3_assets.py). Optional: if the
+	// files aren't present GL_LoadTexture returns 0 and we fall back to procedural drawing.
+	m_iRingTex = m_iPlayerTex = 0;
+	if( bUseRenderAPI )
+	{
+		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
+		m_iRingTex   = gRenderAPI.GL_LoadTexture( "gfx/mp3/radar_ring.png",   NULL, 0, f );
+		m_iPlayerTex = gRenderAPI.GL_LoadTexture( "gfx/mp3/radar_player.png", NULL, 0, f );
+	}
 	return 1;
 }
 
@@ -720,12 +733,25 @@ bool CHudRadar::DrawMiniMap()
 	return true;
 }
 
-// Dark circular border drawn on top of the minimap to frame it (a true pixel-perfect circular
-// mask isn't possible: the client render API exposes no scissor/stencil).
+// Circular frame around the minimap. Uses the Max Payne 3 radar ring texture when available;
+// otherwise a procedural dark ring (a true pixel-perfect circular mask isn't possible: the
+// client render API exposes no scissor/stencil).
 void CHudRadar::DrawMiniMapFrame()
 {
 	int cx = m_iRadarX + iMaxRadius;
 	int cy = m_iRadarY + iMaxRadius;
+
+	if( bUseRenderAPI && m_iRingTex )
+	{
+		gRenderAPI.GL_Bind( 0, m_iRingTex );
+		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+		gEngfuncs.pTriAPI->Color4f( 1, 1, 1, 1 );
+		DrawUtils::Draw2DQuad( cx - iMaxRadius, cy - iMaxRadius, cx + iMaxRadius, cy + iMaxRadius );
+		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+		return;
+	}
+
 	const int seg = 64;
 	for( int k = 0; k < seg; k++ )
 	{
@@ -736,14 +762,26 @@ void CHudRadar::DrawMiniMapFrame()
 	}
 }
 
-// White pointer for the local player at the center of the radar. The map rotates around the
-// player, so the pointer always faces "up".
+// Pointer for the local player at the center of the radar. The map rotates around the player,
+// so the pointer always faces "up". Uses the Max Payne 3 chevron texture when available.
 void CHudRadar::DrawPlayerArrow()
 {
 	int cx = m_iRadarX + iMaxRadius;
 	int cy = m_iRadarY + iMaxRadius;
-	const int h = 6; // half-height; filled triangle, apex up
 
+	if( bUseRenderAPI && m_iPlayerTex )
+	{
+		int s = XRES( 2 ); // half-size of the pointer (~1/4 of the original)
+		gRenderAPI.GL_Bind( 0, m_iPlayerTex );
+		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+		gEngfuncs.pTriAPI->Color4f( 1, 1, 1, 1 );
+		DrawUtils::Draw2DQuad( cx - s, cy - s, cx + s, cy + s );
+		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+		return;
+	}
+
+	const int h = 6; // half-height; filled triangle, apex up
 	// thin dark outline behind the arrow for contrast
 	for( int r = 0; r <= h; r++ )
 		FillRGBA( cx - r - 1, cy - h + r, 2 * r + 3, 1, 0, 0, 0, 200 );
