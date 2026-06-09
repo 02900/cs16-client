@@ -5,7 +5,7 @@
     "textures/hud.wtd",
     "textures/crosshairs.wtd",
     "textures/blips.wtd",
-    "textures/allfontsinone.wtd"
+    "textures/payne_hud_mp.wtd"
   ],
 
   "assets": [
@@ -16,6 +16,6 @@
     { "src": "radar_north",      "dest": "gfx/mp3/radar_north.png" },
     { "src": "crosshairring",    "dest": "gfx/mp3/crosshair_ring.png" },
     { "src": "crosshairdot",     "dest": "gfx/mp3/crosshair_dot.png" },
-    { "src": "allfontsinone",    "dest": "gfx/mp3/font.png" }
+    { "src": "death_numbers",    "dest": "gfx/mp3/death_numbers.png" }
   ]
 }

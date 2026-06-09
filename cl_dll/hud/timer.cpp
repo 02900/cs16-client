@@ -36,6 +36,13 @@ version.
 #include "vgui_parser.h"
 #include <string.h>
 #include "draw_util.h"
+#include "mp3font.h"
+
+// Max Payne 3 style chip behind a HUD number cluster (score chips solid black, timer light gray)
+static void Chip( int x, int y, int w, int h, int cr, int cg, int cb, int ca )
+{
+	FillRGBA( x, y, w, h, cr, cg, cb, ca );
+}
 
 int CHudTimer::Init()
 {
@@ -50,6 +57,7 @@ int CHudTimer::Init()
 int CHudTimer::VidInit()
 {
 	m_HUD_timer = gHUD.GetSpriteIndex( "stopwatch" );
+	gMp3Font.Load();
 	return 1;
 }
 
@@ -79,6 +87,81 @@ int CHudTimer::Draw( float fTime )
 			m_bPanicColorChange = !m_bPanicColorChange;
 		}
 		DrawUtils::UnpackRGB( r, g, b, m_bPanicColorChange ? gHUD.m_iDefaultHUDColor : RGB_REDISH );
+	}
+
+	// --- Max Payne 3 number font + chips: score (white) | timer | score (red) ---
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+
+	if( gMp3Font.Ready() && cl_hud_mp3->value )
+	{
+		int H    = YRES( 20 );
+		int colW = H / 4;
+		int padX = H / 4, padY = H / 6;
+		int gapC = H / 5;            // gap between chips (MP3 chips sit snug together)
+		int gd   = max( 1, H / 12 ); // inter-digit gap
+		int ty   = YRES( 10 );
+
+		int s10 = seconds / 10, s1 = seconds % 10;
+		int minW = gMp3Font.NumberWidth( minutes, H );
+		int secW = gMp3Font.DigitWidth( s10, H ) + gd + gMp3Font.DigitWidth( s1, H );
+		int timerW = minW + colW + secW;
+
+		int tx0 = ScreenWidth / 2 - timerW / 2;
+
+		// timer chip is LIGHT GRAY with dark digits (Max Payne 3); digits turn red when time is low
+		bool panic = ( minutes * 60 + seconds ) <= 20;
+		int tcr = panic ? 210 : 35;
+		int tcg = panic ? 40  : 35;
+		int tcb = panic ? 40  : 35;
+		Chip( tx0 - padX, ty - padY, timerW + 2 * padX, H + 2 * padY, 205, 205, 205, 255 );
+		int tx = tx0;
+		gMp3Font.DrawNumber( tx, ty, H, minutes, tcr, tcg, tcb, 255 );
+		tx += minW;
+		int ds = max( 2, H / 8 );
+		FillRGBA( tx + colW / 2 - ds / 2, ty + (int)( H * 0.30f ), ds, ds, tcr, tcg, tcb, 255 );
+		FillRGBA( tx + colW / 2 - ds / 2, ty + (int)( H * 0.58f ), ds, ds, tcr, tcg, tcb, 255 );
+		tx += colW;
+		gMp3Font.DrawDigit( tx, ty, H, s10, tcr, tcg, tcb, 255 );
+		tx += gMp3Font.DigitWidth( s10, H ) + gd;
+		gMp3Font.DrawDigit( tx, ty, H, s1, tcr, tcg, tcb, 255 );
+
+		// scores: FFA -> your frags (left only); teams -> your team (left) vs enemy (right)
+		static cvar_t *ffa = NULL;
+		if( !ffa ) ffa = gEngfuncs.pfnGetCvarPointer( "mp_freeforall" );
+		bool isFFA = ffa && ffa->value != 0.0f;
+
+		int leftScore = 0, rightScore = 0;
+		bool hasRight = false;
+		if( isFFA )
+		{
+			leftScore = g_PlayerExtraInfo[gHUD.m_Scoreboard.m_iPlayerNum].frags;
+		}
+		else
+		{
+			for( int i = 1; i <= MAX_PLAYERS; i++ )
+			{
+				int tn = g_PlayerExtraInfo[i].teamnumber;
+				if( tn == g_iTeamNumber )      leftScore  += g_PlayerExtraInfo[i].frags;
+				else if( tn == 1 || tn == 2 )  rightScore += g_PlayerExtraInfo[i].frags;
+			}
+			hasRight = true;
+		}
+
+		int lw = gMp3Font.NumberWidth( leftScore, H );
+		int lChipR = tx0 - padX - gapC;
+		Chip( lChipR - lw - 2 * padX, ty - padY, lw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
+		gMp3Font.DrawNumber( lChipR - lw - padX, ty, H, leftScore, 255, 255, 255, 255 );
+
+		if( hasRight )
+		{
+			int rw = gMp3Font.NumberWidth( rightScore, H );
+			int rChipL = tx0 + timerW + padX + gapC;
+			Chip( rChipL, ty - padY, rw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
+			gMp3Font.DrawNumber( rChipL + padX, ty, H, rightScore, 245, 70, 70, 255 );
+		}
+
+		return 1;
 	}
 
 	DrawUtils::ScaleColors( r, g, b, MIN_ALPHA );
