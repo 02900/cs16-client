@@ -38,10 +38,12 @@ version.
 #include "draw_util.h"
 #include "mp3font.h"
 
-// Max Payne 3 style chip behind a HUD number cluster (score chips solid black, timer light gray)
+// Max Payne 3 style chip behind a HUD number cluster (score chips solid black, timer light gray).
+// NOTE: FillRGBA is additive in this engine (black draws nothing) -> use FillRGBABlend so an
+// opaque black/dark fill actually shows.
 static void Chip( int x, int y, int w, int h, int cr, int cg, int cb, int ca )
 {
-	FillRGBA( x, y, w, h, cr, cg, cb, ca );
+	FillRGBABlend( x, y, w, h, cr, cg, cb, ca );
 }
 
 int CHudTimer::Init()
@@ -96,9 +98,9 @@ int CHudTimer::Draw( float fTime )
 	if( gMp3Font.Ready() && cl_hud_mp3->value )
 	{
 		int H    = YRES( 20 );
-		int colW = H / 4;
+		int colW = H / 6;
 		int padX = H / 4, padY = H / 6;
-		int gapC = H / 5;            // gap between chips (MP3 chips sit snug together)
+		int gapC = 0;               // chips sit flush against each other (Max Payne 3)
 		int gd   = max( 1, H / 12 ); // inter-digit gap
 		int ty   = YRES( 10 );
 
@@ -118,9 +120,9 @@ int CHudTimer::Draw( float fTime )
 		int tx = tx0;
 		gMp3Font.DrawNumber( tx, ty, H, minutes, tcr, tcg, tcb, 255 );
 		tx += minW;
-		int ds = max( 2, H / 8 );
-		FillRGBA( tx + colW / 2 - ds / 2, ty + (int)( H * 0.30f ), ds, ds, tcr, tcg, tcb, 255 );
-		FillRGBA( tx + colW / 2 - ds / 2, ty + (int)( H * 0.58f ), ds, ds, tcr, tcg, tcb, 255 );
+		int ds = max( 2, H / 12 );
+		FillRGBABlend( tx + colW / 2 - ds / 2, ty + (int)( H * 0.34f ), ds, ds, tcr, tcg, tcb, 255 );
+		FillRGBABlend( tx + colW / 2 - ds / 2, ty + (int)( H * 0.60f ), ds, ds, tcr, tcg, tcb, 255 );
 		tx += colW;
 		gMp3Font.DrawDigit( tx, ty, H, s10, tcr, tcg, tcb, 255 );
 		tx += gMp3Font.DigitWidth( s10, H ) + gd;
