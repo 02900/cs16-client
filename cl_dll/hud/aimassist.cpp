@@ -146,32 +146,32 @@ int CHudAimAssist::Draw( float flTime )
 		}
 	}
 
-	// --- soft-lock gizmo: dot on the target + two ovals (free-aim ring + hard-clamp ring) ---
-	// Projected around the target: INNER oval = the free-aim cone (no pull), OUTER oval = the hard
-	// clamp the aim can never cross. The crosshair (screen center) lives between them: green inside
-	// the free ring, the magnet springs it back between rings, and it is walled at the outer ring.
-	// Both grow up close and shrink at range (dynamic deadzone).
-	if( g_iAimAssistTarget && g_flAimAssistCapCone > 0.0f )
+	// --- soft-lock gizmo: dot on the target + two ellipses (free-aim ring + hard-clamp ring) ---
+	// Projected around the target: INNER ellipse = the free-aim zone (no pull), OUTER ellipse = the
+	// hard clamp the aim can never cross. The crosshair (screen center) lives between them: green
+	// inside the free ring, the magnet springs it back between rings, walled at the outer ring. The
+	// rings are elliptical (aim_assist_width/height) so they sketch a human silhouette, and they grow
+	// up close / shrink at range (dynamic deadzone).
+	if( g_iAimAssistTarget && g_flAimAssistCapH > 0.0f )
 	{
 		cl_entity_t *t = gEngfuncs.GetEntityByIndex( g_iAimAssistTarget );
 		if( t )
 		{
-			bool pulling = ( g_flAimAssistAngle > g_flAimAssistDeadCone );
-
 			// origin dot at center mass (the point aaDesired steers toward)
 			int ox, oy;
 			if( AA_Project( t->curstate.origin, ox, oy ) )
 				FillRGBA( ox - 2, oy - 2, 4, 4, 255, 255, 255, 255 );
 
-			// ring of world radius r = dist * tan(cone) in the view plane, around the target
+			// each ring: world half-extents rw/rh = dist * tan(half-angle) in the view plane
 			for( int ring = 0; ring < 2; ring++ )
 			{
-				float cone = ring ? g_flAimAssistCapCone : g_flAimAssistDeadCone;
-				float r = g_flAimAssistDist * tan( DEG2RAD( cone ) );
+				float coneW = ring ? g_flAimAssistCapW : g_flAimAssistDeadW;
+				float coneH = ring ? g_flAimAssistCapH : g_flAimAssistDeadH;
+				float rw = g_flAimAssistDist * tan( DEG2RAD( coneW ) );
+				float rh = g_flAimAssistDist * tan( DEG2RAD( coneH ) );
 				// inner = free zone (green if free, red if the aim is past it); outer = wall (orange)
-				int cr = ring ? 255 : ( pulling ? 255 : 0 );
-				int cg = ring ? 140 : ( pulling ? 0   : 255 );
-				int cb = 0;
+				int cr = ring ? 255 : ( g_bAimAssistPulling ? 255 : 0 );
+				int cg = ring ? 140 : ( g_bAimAssistPulling ? 0   : 255 );
 				for( int k = 0; k < 32; k++ )
 				{
 					float a  = DEG2RAD( k * ( 360.0f / 32.0f ) );
@@ -179,9 +179,9 @@ int CHudAimAssist::Draw( float flTime )
 					vec3_t p;
 					int px, py;
 					for( int j = 0; j < 3; j++ )
-						p[j] = t->curstate.origin[j] + ( g_vecAimRight[j] * ca + g_vecAimUp[j] * sa ) * r;
+						p[j] = t->curstate.origin[j] + g_vecAimRight[j] * ca * rw + g_vecAimUp[j] * sa * rh;
 					if( AA_Project( p, px, py ) )
-						FillRGBA( px - 1, py - 1, 3, 3, cr, cg, cb, 230 );
+						FillRGBA( px - 1, py - 1, 3, 3, cr, cg, 0, 230 );
 				}
 			}
 		}

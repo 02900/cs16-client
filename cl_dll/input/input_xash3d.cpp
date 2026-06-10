@@ -33,8 +33,9 @@ cvar_t	*aim_assist;			// master on/off
 cvar_t	*aim_assist_lock_fov;		// acquisition cone half-angle while the button is held (degrees)
 cvar_t	*aim_assist_pull;		// magnetism strength 0..1
 cvar_t	*aim_assist_slow;		// sticky slowdown factor applied to stick input
-cvar_t	*aim_assist_deadzone;		// free-aim cone (inner ring) as a multiple of the target's body size
-cvar_t	*aim_assist_cap;		// hard clamp (outer ring) as a multiple of the free-aim cone
+cvar_t	*aim_assist_cap;		// hard clamp (outer ring) as a multiple of the free-aim zone
+cvar_t	*aim_assist_width;		// inner ring horizontal half-extent, as a multiple of the target's body size
+cvar_t	*aim_assist_height;		// inner ring vertical half-extent, as a multiple of the target's body size
 cvar_t	*aim_assist_range;		// max target distance (units)
 cvar_t	*aim_assist_wallcheck;		// require line of sight to the target
 cvar_t	*aim_assist_debug;		// debug overlay (text + head marker)
@@ -49,9 +50,13 @@ float g_flAimAssistDist = 0.0f;		// distance to the chosen target
 float g_flAimAssistAngle = 0.0f;	// angular separation (deg) to the chosen target
 int   g_iAimAssistNearestIdx = 0;	// nearest visible enemy by angle, ignoring the cone
 float g_flAimAssistNearestAngle = 0.0f;	// its angle (diagnose a too-tight cone)
-float g_flAimAssistDeadCone = 0.0f;	// soft-lock free-aim cone half-angle (deg, inner ring); 0 = no lock
-float g_flAimAssistCapCone  = 0.0f;	// soft-lock hard-clamp half-angle (deg, outer ring); 0 = no lock
-                                    // (consumed by the debug gizmo in hud/aimassist.cpp)
+// Soft-lock ellipse half-extents (deg) this frame; 0 = no lock. W = horizontal (yaw), H = vertical
+// (pitch). Inner ring = free-aim zone, outer ring = hard clamp. Consumed by the debug gizmo.
+float g_flAimAssistDeadW = 0.0f;	// inner ring horizontal half-extent
+float g_flAimAssistDeadH = 0.0f;	// inner ring vertical half-extent
+float g_flAimAssistCapW  = 0.0f;	// outer ring horizontal half-extent
+float g_flAimAssistCapH  = 0.0f;	// outer ring vertical half-extent
+bool  g_bAimAssistPulling = false;	// view is outside the inner ellipse (magnet correcting)
 
 // view basis used by the assist, stored each frame for the debug cone visualization
 vec3_t g_vecAimEye   = { 0, 0, 0 };
@@ -192,6 +197,33 @@ static bool AimAssist_Visible( float *start, float *end )
 	return tr.fraction >= AA_LOS_CLEAR; // ~1.0 means nothing solid in the world blocks the view
 }
 
+// Returns true if ANY of a few sample points on the target's body (center, head, feet, both
+// shoulders) has a clear line from the eye -- so a partially-exposed enemy (only an arm/head/
+// shoulder poking past cover) still counts as visible instead of being rejected wholesale because
+// the center of mass is behind the wall. `origin` is the entity center (curstate.origin).
+static bool AimAssist_BodyVisible( float *eye, float *origin )
+{
+	// horizontal perpendicular to the eye->target line, for the shoulder/arm samples
+	vec3_t flat = { origin[0] - eye[0], origin[1] - eye[1], 0.0f };
+	float fl = sqrt( flat[0] * flat[0] + flat[1] * flat[1] );
+	vec3_t perp = { 0.0f, 0.0f, 0.0f };
+	if( fl > 0.001f ) { perp[0] = -flat[1] / fl; perp[1] = flat[0] / fl; }
+
+	// z offset + lateral offset (units) per sample: center, head, feet, left & right shoulder
+	static const float zoff[]  = {  0.0f, 24.0f, -24.0f, 16.0f, 16.0f };
+	static const float latoff[] = { 0.0f,  0.0f,   0.0f, -16.0f, 16.0f };
+	for( int s = 0; s < 5; s++ )
+	{
+		vec3_t p;
+		p[0] = origin[0] + perp[0] * latoff[s];
+		p[1] = origin[1] + perp[1] * latoff[s];
+		p[2] = origin[2] + zoff[s];
+		if( AimAssist_Visible( eye, p ) )
+			return true;
+	}
+	return false;
+}
+
 // Picks the enemy closest to the crosshair within the assist cone, alive and visible.
 static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 {
@@ -274,9 +306,9 @@ static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 
 		if( wallcheck )
 		{
-			vec3_t tgt;
-			VectorCopy( e->curstate.origin, tgt );
-			if( !AimAssist_Visible( eye, tgt ) )
+			// sample several body points, not just the center -- a partially-exposed enemy
+			// (only an arm/shoulder/head visible) should still be acquirable
+			if( !AimAssist_BodyVisible( eye, e->curstate.origin ) )
 				continue;
 		}
 
@@ -298,45 +330,43 @@ static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 
 static bool  s_aaPrevLocked = false;	// was the soft-lock active last frame (for the end summary)
 static float s_aaLogAccum   = 0.0f;	// time accumulator for the sample throttle
-static float s_aaPeakDev    = 0.0f;	// max angular deviation reached this lock session (deg)
+static float s_aaPeakNin    = 0.0f;	// max normalized deviation reached this session (1 = inner edge)
 static float s_aaLastDist   = 0.0f;	// last seen values, for the session summary
-static float s_aaLastCone   = 0.0f;
-static float s_aaLastCap    = 0.0f;
+static float s_aaLastDeadW  = 0.0f, s_aaLastDeadH = 0.0f; // inner ellipse half-extents (deg)
 
-static void AimAssist_LogDeadzone( float frametime, float dist, float body, float dead, float cap, float ang, bool pulling, bool clamped )
+static void AimAssist_LogDeadzone( float frametime, float dist, float deadW, float deadH, float capW, float capH, float nin, bool pulling, bool clamped )
 {
-	if( ang > s_aaPeakDev ) s_aaPeakDev = ang; // track the peak even on throttled frames
-	s_aaLastDist = dist;
-	s_aaLastCone = dead;
-	s_aaLastCap  = cap;
+	if( nin > s_aaPeakNin ) s_aaPeakNin = nin; // track the peak even on throttled frames
+	s_aaLastDist  = dist;
+	s_aaLastDeadW = deadW;
+	s_aaLastDeadH = deadH;
 
 	s_aaLogAccum += frametime;
 	if( s_aaLogAccum < AA_DBG_HZ )
 		return;
 	s_aaLogAccum = 0.0f;
 
-	float lateral = dist * tan( DEG2RAD( dead ) ); // off-center units the crosshair may sit at this range
 	const char *state = clamped ? "CLAMPED" : ( pulling ? "PULLING" : "free" );
 	FILE *fp = fopen( AA_DBG_PATH, "a" );
 	if( !fp )
 		return;
-	fprintf( fp, "dist %5.0f  body %5.2f  free %5.2f deg (= %5.0f u)  cap %5.2f deg  curDev %5.2f deg  peak %5.2f deg  %s\n",
-		dist, body, dead, lateral, cap, ang, s_aaPeakDev, state );
+	// nin/peak are normalized to the inner ellipse: <1 free, 1 = on the edge, up to cap-multiple at the wall
+	fprintf( fp, "dist %5.0f  free %4.2fx%4.2f deg  cap %4.2fx%4.2f deg  dev %4.2f  peak %4.2f  %s\n",
+		dist, deadW, deadH, capW, capH, nin, s_aaPeakNin, state );
 	fclose( fp );
 }
 
 static void AimAssist_LogDeadzoneEnd( void )
 {
-	float ratio = s_aaLastCone > 0.0f ? s_aaPeakDev / s_aaLastCone : 0.0f;
 	FILE *fp = fopen( AA_DBG_PATH, "a" );
 	if( fp )
 	{
-		fprintf( fp, "=== lock end === dist %.0f  free %.2f deg  cap %.2f deg  peakDev %.2f deg  (peak/free = %.2f  %s)\n\n",
-			s_aaLastDist, s_aaLastCone, s_aaLastCap, s_aaPeakDev, ratio,
-			s_aaPeakDev > s_aaLastCap + 0.01f ? "ESCAPED CAP(!)" : ( ratio >= 1.0f ? "held between rings" : "stayed in free zone" ) );
+		fprintf( fp, "=== lock end === dist %.0f  free %.2fx%.2f deg  peakDev %.2f (x inner)  %s\n\n",
+			s_aaLastDist, s_aaLastDeadW, s_aaLastDeadH, s_aaPeakNin,
+			s_aaPeakNin <= 1.01f ? "stayed in free zone" : "held between rings" );
 		fclose( fp );
 	}
-	s_aaPeakDev = 0.0f;
+	s_aaPeakNin = 0.0f;
 	s_aaLogAccum = 0.0f;
 }
 
@@ -468,55 +498,63 @@ void IN_Move( float frametime, usercmd_t *cmd )
 		while( dyaw > 180.0f )  dyaw -= 360.0f; // shortest way around
 		while( dyaw < -180.0f ) dyaw += 360.0f;
 
-		float ang  = sqrt( dyaw * dyaw + dpitch * dpitch );      // separation to center mass (deg)
 		float dist = g_flAimAssistDist > 1.0f ? g_flAimAssistDist : 1.0f;
 		float body = RAD2DEG( atan2( AA_TARGET_HALF_HEIGHT, dist ) ); // body angular half-size
-		float dead = body * aim_assist_deadzone->value;          // free-aim cone (inner ring)
-		float cap  = dead * aim_assist_cap->value;               // hard clamp (outer ring)
 
-		// Two rings: free aim inside `dead` (no pull), soft spring between `dead` and `cap`, and a
-		// HARD wall at `cap` -- the aim can never drift past the outer ring, so it never loses the
-		// target. dyaw/dpitch is the offset from the target toward the current view (so we can both
-		// pull it back and clamp it).
-		bool pulling = ( ang > dead );
+		// Elliptical free-aim zone (human silhouette: narrower than tall). W = horizontal (yaw), H =
+		// vertical (pitch), each a multiple of the body size. A tiny floor avoids divide-by-zero.
+		float deadW = body * aim_assist_width->value;  if( deadW < 0.01f ) deadW = 0.01f;
+		float deadH = body * aim_assist_height->value; if( deadH < 0.01f ) deadH = 0.01f;
+		float capW  = deadW * aim_assist_cap->value;
+		float capH  = deadH * aim_assist_cap->value;
+
+		// Two ellipses: free aim inside the inner one (no pull), soft spring between them, and a HARD
+		// wall at the outer one -- the aim can never drift past it, so it never loses the target.
+		// `nin` is the normalized distance on the inner ellipse (1 = on the edge); for a circle this
+		// reduces to ang/dead, so the spring math (keep = excess fraction) is unchanged.
+		float nin = sqrt( ( dyaw / deadW ) * ( dyaw / deadW ) + ( dpitch / deadH ) * ( dpitch / deadH ) );
+		bool pulling = ( nin > 1.0f );
 		if( pulling )
 		{
-			float keep = ( ang - dead ) / ang;                   // pull back only the excess
+			float keep = ( nin - 1.0f ) / nin;                   // pull back only the excess
 			float t = aim_assist_pull->value * frametime * AA_PULL_REF_FPS;
 			if( t > 1.0f ) t = 1.0f;
 			if( t < 0.0f ) t = 0.0f;
 			viewangles[YAW]   += dyaw   * keep * t;
 			viewangles[PITCH] += dpitch * keep * t;
 		}
-		// inside the cone: no pull -> free aim within the target's body
+		// inside the ellipse: no pull -> free aim within the target's silhouette
 
-		// hard clamp at the outer ring: recompute the offset after the spring and pin it to `cap`
+		// hard clamp on the outer ellipse: recompute the offset after the spring and pin it to the ring
 		bool clamped = false;
-		if( cap > 0.0f )
+		if( capW > 0.0f && capH > 0.0f )
 		{
 			float ovyaw   = viewangles[YAW]   - aaDesired[YAW];  // view offset from target (deg)
 			float ovpitch = viewangles[PITCH] - aaDesired[PITCH];
 			while( ovyaw > 180.0f )  ovyaw -= 360.0f;
 			while( ovyaw < -180.0f ) ovyaw += 360.0f;
-			float ov = sqrt( ovyaw * ovyaw + ovpitch * ovpitch );
-			if( ov > cap )
+			float nout = sqrt( ( ovyaw / capW ) * ( ovyaw / capW ) + ( ovpitch / capH ) * ( ovpitch / capH ) );
+			if( nout > 1.0f )
 			{
-				float s = cap / ov;                              // scale the offset back onto the ring
+				float s = 1.0f / nout;                           // project radially onto the ellipse
 				viewangles[YAW]   = aaDesired[YAW]   + ovyaw   * s;
 				viewangles[PITCH] = aaDesired[PITCH] + ovpitch * s;
 				clamped = true;
 			}
 		}
 
-		g_flAimAssistDeadCone = dead; // expose both cones to the debug gizmo
-		g_flAimAssistCapCone  = cap;
+		g_flAimAssistDeadW = deadW; // expose both ellipses to the debug gizmo
+		g_flAimAssistDeadH = deadH;
+		g_flAimAssistCapW  = capW;
+		g_flAimAssistCapH  = capH;
+		g_bAimAssistPulling = pulling;
 
 		// --- DEBUG (aim_assist_debug>=2): dump deadzone telemetry to disk ---
 		// Same "numbers to a file" trick as the decal bug (see .devnotes/aim-debug-to-file.md):
 		// log how far the aim can drift before the magnet pulls, vs how far it actually drifted.
 		if( aim_assist_debug->value >= 2.0f )
 		{
-			AimAssist_LogDeadzone( frametime, dist, body, dead, cap, ang, pulling, clamped );
+			AimAssist_LogDeadzone( frametime, dist, deadW, deadH, capW, capH, nin, pulling, clamped );
 			s_aaPrevLocked = true;
 		}
 	}
@@ -527,7 +565,11 @@ void IN_Move( float frametime, usercmd_t *cmd )
 	}
 
 	if( !( aaTarget && g_bAimAssistKey ) )
-		g_flAimAssistDeadCone = g_flAimAssistCapCone = 0.0f; // no lock -> hide the gizmo
+	{
+		g_flAimAssistDeadW = g_flAimAssistDeadH = 0.0f; // no lock -> hide the gizmo
+		g_flAimAssistCapW  = g_flAimAssistCapH  = 0.0f;
+		g_bAimAssistPulling = false;
+	}
 
 	if (viewangles[PITCH] > cl_pitchdown->value)
 		viewangles[PITCH] = cl_pitchdown->value;
@@ -624,8 +666,9 @@ void IN_Init( void )
 	aim_assist_lock_fov        = gEngfuncs.pfnRegisterVariable( "aim_assist_lock_fov",        "45",      FCVAR_ARCHIVE );
 	aim_assist_pull            = gEngfuncs.pfnRegisterVariable( "aim_assist_pull",            "0.25",    FCVAR_ARCHIVE );
 	aim_assist_slow            = gEngfuncs.pfnRegisterVariable( "aim_assist_slow",            "0.4",     FCVAR_ARCHIVE );
-	aim_assist_deadzone        = gEngfuncs.pfnRegisterVariable( "aim_assist_deadzone",        "1.0",     FCVAR_ARCHIVE );
 	aim_assist_cap             = gEngfuncs.pfnRegisterVariable( "aim_assist_cap",             "2.0",     FCVAR_ARCHIVE );
+	aim_assist_width           = gEngfuncs.pfnRegisterVariable( "aim_assist_width",           "0.25",    FCVAR_ARCHIVE );
+	aim_assist_height          = gEngfuncs.pfnRegisterVariable( "aim_assist_height",          "0.5",     FCVAR_ARCHIVE );
 	aim_assist_range           = gEngfuncs.pfnRegisterVariable( "aim_assist_range",           "2250",    FCVAR_ARCHIVE );
 	aim_assist_wallcheck       = gEngfuncs.pfnRegisterVariable( "aim_assist_wallcheck",       "1",       FCVAR_ARCHIVE );
 	aim_assist_debug           = gEngfuncs.pfnRegisterVariable( "aim_assist_debug",           "0",       FCVAR_ARCHIVE );

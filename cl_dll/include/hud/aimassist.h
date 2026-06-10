@@ -14,8 +14,12 @@ extern float  g_flAimAssistDist;      // distance to the chosen target
 extern float  g_flAimAssistAngle;     // angular separation (deg) to the chosen target
 extern int    g_iAimAssistNearestIdx; // nearest visible enemy by angle, ignoring the cone
 extern float  g_flAimAssistNearestAngle; // its angle (to diagnose a too-tight cone)
-extern float  g_flAimAssistDeadCone;  // soft-lock free-aim cone half-angle (deg, inner ring); 0 = no lock
-extern float  g_flAimAssistCapCone;   // soft-lock hard-clamp half-angle (deg, outer ring); 0 = no lock
+// Soft-lock ellipse half-extents (deg); W = horizontal (yaw), H = vertical (pitch); 0 = no lock.
+extern float  g_flAimAssistDeadW;     // inner ring (free-aim zone) horizontal half-extent
+extern float  g_flAimAssistDeadH;     // inner ring vertical half-extent
+extern float  g_flAimAssistCapW;      // outer ring (hard clamp) horizontal half-extent
+extern float  g_flAimAssistCapH;      // outer ring vertical half-extent
+extern bool   g_bAimAssistPulling;    // view is outside the inner ellipse (magnet correcting)
 
 extern vec3_t g_vecAimEye;   // camera origin used by the assist (for the debug cone)
 extern vec3_t g_vecAimFwd;   // view forward
