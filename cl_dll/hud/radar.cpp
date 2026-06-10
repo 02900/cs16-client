@@ -221,6 +221,7 @@ int CHudRadar::VidInit(void)
 	// force the overview minimap to (re)load for the new map on next Draw
 	m_pMiniMap = NULL;
 	m_szMiniLevel[0] = 0;
+	m_iRadarY = ScreenHeight; // placeholder until the first Draw computes the real anchor
 
 	// Max Payne 3 radar art (imported via scripts/import_mp3_assets.py). Optional: if the
 	// files aren't present GL_LoadTexture returns 0 and we fall back to procedural drawing.

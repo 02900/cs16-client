@@ -23,12 +23,14 @@
 #include <stdio.h>
 #include "draw_util.h"
 #include "strl.h"
+#include "mp3textfont.h"
 
 float color[3];
 
 struct DeathNoticeItem {
 	char szKiller[MAX_PLAYER_NAME_LENGTH*2];
 	char szVictim[MAX_PLAYER_NAME_LENGTH*2];
+	char szWeapon[32];	// weapon name as text (Max Payne 3 kill feed)
 	int iId;	// the index number of the associated sprite
 	bool bSuicide;
 	bool bTeamKill;
@@ -101,48 +103,53 @@ int CHudDeathNotice :: Draw( float flTime )
 		//if ( gViewPort && gViewPort->AllowedToPrintText() )
 		//if ( !gHUD.m_iNoConsolePrint )
 		{
-			// Max Payne 3: kill feed sits ABOVE the radar (bottom-left), left-aligned and
-			// stacked upward. Anchor to the real radar sprite height so it clears it at any res.
-			int radarH = gHUD.m_Radar.m_hRadarOpaque.rect.Height();
-			y = ScreenHeight - radarH - YRES( 26 ) - YRES( 8 ) - (20 * i);
+			// Max Payne 3 kill feed: two lines in the MP3 text font, stacked above the radar.
+			//   line 1 (white):  killer
+			//   line 2:          weapon (gray)  victim (red)
+			// NOTE: CS sends no assist info in the death message, so the assister can't be shown
+			// on line 1 without server-side changes.
+			char weap[40];
+			strlcpy( weap, rgDeathNoticeList[i].szWeapon, sizeof( weap ) );
+			if ( rgDeathNoticeList[i].iHeadShotId )
+				strlcat( weap, " (HS)", sizeof( weap ) );
 
-			int id = (rgDeathNoticeList[i].iId == -1) ? m_HUD_d_skull : rgDeathNoticeList[i].iId;
+			int wr = rgDeathNoticeList[i].bTeamKill ? 30  : 170;
+			int wg = rgDeathNoticeList[i].bTeamKill ? 230 : 170;
+			int wb = rgDeathNoticeList[i].bTeamKill ? 30  : 170;
 			x = XRES( 8 );
 
-			// Draw killers name (left)
-			if ( !rgDeathNoticeList[i].bSuicide )
+			if ( gMp3Text.Ready() )
 			{
-				if ( rgDeathNoticeList[i].KillerColor )
-					DrawUtils::SetConsoleTextColor( rgDeathNoticeList[i].KillerColor[0], rgDeathNoticeList[i].KillerColor[1], rgDeathNoticeList[i].KillerColor[2] );
-				x = DrawUtils::DrawConsoleString( x, y, rgDeathNoticeList[i].szKiller );
-				x += 5;
+				int H = YRES( 11 ) / 2;             // cap height (half of before)
+				int lineH = (int)( H * 1.7f );      // line spacing (room for descenders)
+				int blockH = 2 * lineH + YRES( 6 );
+				int blockBottom = gHUD.m_Radar.RadarTopY() - YRES( 10 ) - i * blockH;
+				int base2 = blockBottom - YRES( 5 );   // weapon + victim baseline
+				int base1 = base2 - lineH;             // killer baseline
+
+				if ( !rgDeathNoticeList[i].bSuicide )
+					gMp3Text.DrawString( x, base1, H, rgDeathNoticeList[i].szKiller, 255, 255, 255, 255 );
+
+				int vx = gMp3Text.DrawString( x, base2, H, weap, wr, wg, wb, 255 );
+				vx += XRES( 6 );
+				if ( !rgDeathNoticeList[i].bNonPlayerKill )
+					gMp3Text.DrawString( vx, base2, H, rgDeathNoticeList[i].szVictim, 235, 60, 60, 255 );
 			}
-
-			r = 255;  g = 80;	b = 0;
-			if ( rgDeathNoticeList[i].bTeamKill )
+			else
 			{
-				r = 10;	g = 240; b = 10;  // display it in sickly green
-			}
-
-			// Draw death weapon
-			SPR_Set( gHUD.GetSprite(id), r, g, b );
-			SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect(id) );
-
-			x += (gHUD.GetSpriteRect(id).Width());
-
-			if( rgDeathNoticeList[i].iHeadShotId)
-			{
-				SPR_Set( gHUD.GetSprite(m_HUD_d_headshot), r, g, b );
-				SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect(m_HUD_d_headshot));
-				x += (gHUD.GetSpriteRect(m_HUD_d_headshot).Width());
-			}
-
-			// Draw victims name (if it was a player that was killed)
-			if (!rgDeathNoticeList[i].bNonPlayerKill)
-			{
-				if ( rgDeathNoticeList[i].VictimColor )
-					DrawUtils::SetConsoleTextColor( rgDeathNoticeList[i].VictimColor[0], rgDeathNoticeList[i].VictimColor[1], rgDeathNoticeList[i].VictimColor[2] );
-				x = DrawUtils::DrawConsoleString( x, y, rgDeathNoticeList[i].szVictim );
+				// fallback: CS HUD font
+				float sc = 1.4f;
+				int lineH = (int)( gHUD.m_iFontHeight * sc ) + YRES( 2 );
+				int blockH = 2 * lineH + YRES( 6 );
+				int blockBottom = gHUD.m_Radar.RadarTopY() - YRES( 12 ) - i * blockH;
+				int y1 = blockBottom - 2 * lineH;
+				int y2 = blockBottom - lineH;
+				if ( !rgDeathNoticeList[i].bSuicide )
+					DrawUtils::DrawHudString( x, y1, ScreenWidth, rgDeathNoticeList[i].szKiller, 255, 255, 255, sc );
+				int vx = DrawUtils::DrawHudString( x, y2, ScreenWidth, weap, wr, wg, wb, sc );
+				vx += XRES( 6 );
+				if ( !rgDeathNoticeList[i].bNonPlayerKill )
+					DrawUtils::DrawHudString( vx, y2, ScreenWidth, rgDeathNoticeList[i].szVictim, 235, 60, 60, sc );
 			}
 		}
 	}
@@ -250,6 +257,9 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 	int spr = gHUD.GetSpriteIndex( killedwith );
 
 	rgDeathNoticeList[i].iId = spr;
+
+	// plain weapon name (strip the "d_" prefix) for the MP3 text kill feed
+	strlcpy( rgDeathNoticeList[i].szWeapon, killedwith + 2, sizeof( rgDeathNoticeList[i].szWeapon ) );
 
 	rgDeathNoticeList[i].flDisplayTime = gHUD.m_flTime + hud_deathnotice_time->value;
 

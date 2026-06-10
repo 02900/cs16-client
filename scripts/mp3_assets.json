@@ -5,7 +5,9 @@
     "textures/hud.wtd",
     "textures/crosshairs.wtd",
     "textures/blips.wtd",
-    "textures/payne_hud_mp.wtd"
+    "textures/payne_hud_mp.wtd",
+    "textures/payne_hud_common.wtd",
+    "textures/allfontsintwo.wtd"
   ],
 
   "assets": [
@@ -16,6 +18,13 @@
     { "src": "radar_north",      "dest": "gfx/mp3/radar_north.png" },
     { "src": "crosshairring",    "dest": "gfx/mp3/crosshair_ring.png" },
     { "src": "crosshairdot",     "dest": "gfx/mp3/crosshair_dot.png" },
-    { "src": "death_numbers",    "dest": "gfx/mp3/death_numbers.png" }
+    { "src": "death_numbers",    "dest": "gfx/mp3/death_numbers.png" },
+    { "src": "health_def",       "dest": "gfx/mp3/health_silhouette.png" },
+    { "src": "ammo_pistol",      "dest": "gfx/mp3/ammo_pistol.png" },
+    { "src": "ammo_rifle",       "dest": "gfx/mp3/ammo_rifle.png" },
+    { "src": "ammo_smg",         "dest": "gfx/mp3/ammo_smg.png" },
+    { "src": "ammo_shotgun",     "dest": "gfx/mp3/ammo_shotgun.png" },
+    { "src": "ammo_sniper",      "dest": "gfx/mp3/ammo_sniper.png" },
+    { "src": "allfontsintwo",    "dest": "gfx/mp3/font.png" }
   ]
 }

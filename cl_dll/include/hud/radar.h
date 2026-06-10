@@ -25,6 +25,9 @@ public:
 	CClientSprite m_hRadar;
 	CClientSprite m_hRadarOpaque;
 
+	// top edge (in screen px) of the radar box, so other HUD elements can sit above it
+	int RadarTopY() const { return m_iRadarY; }
+
 	int MsgFunc_BombDrop(const char *pszName, int iSize, void *pbuf);
 	int MsgFunc_BombPickup(const char *pszName, int iSize, void *pbuf);
 	int MsgFunc_HostagePos(const char *pszName, int iSize, void *pbuf);

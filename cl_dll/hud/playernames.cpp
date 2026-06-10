@@ -19,6 +19,7 @@ sight, so it doesn't reveal people through walls by default.
 #include "pmtrace.h"
 #include "const.h"
 #include "playernames.h"
+#include "mp3textfont.h"
 
 #define PN_HEAD_OFFSET   46.0f   // height above the entity origin for the name
 #define PN_CHEST_OFFSET  18.0f   // LOS trace target / distance reference
@@ -116,8 +117,21 @@ int CHudPlayerNames::Draw( float flTime )
 		int g = enemy ? 60  : 210;
 		int b = enemy ? 60  : 90;
 
-		int len = DrawUtils::HudStringLen( name );
-		DrawUtils::DrawHudString( sx - len / 2, sy, ScreenWidth, name, r, g, b );
+		// name in the Max Payne 3 text font (fallback to the CS HUD font)
+		int H = YRES( 9 ) / 2;   // over-head name cap height
+		int len, nameBottom;
+		if( gMp3Text.Ready() )
+		{
+			len = gMp3Text.StringWidth( name, H );
+			gMp3Text.DrawString( sx - len / 2, sy + H, H, name, r, g, b, 255 );  // baseline = sy + H
+			nameBottom = sy + (int)( H * 1.35f );
+		}
+		else
+		{
+			len = DrawUtils::HudStringLen( name );
+			DrawUtils::DrawHudString( sx - len / 2, sy, ScreenWidth, name, r, g, b );
+			nameBottom = sy + gHUD.m_iFontHeight;
+		}
 
 		// thin health bar right under the name, as wide as the name (Max Payne 3 underline look).
 		int h = g_PlayerExtraInfo[i].sb_health;
@@ -127,9 +141,9 @@ int CHudPlayerNames::Draw( float flTime )
 			int bw = len < XRES( 18 ) ? XRES( 18 ) : len;
 			int bh = YRES( 2 );
 			int bx = sx - bw / 2;
-			int by = sy + gHUD.m_iFontHeight;
-			FillRGBA( bx - 1, by - 1, bw + 2, bh + 2, 0, 0, 0, 160 );
-			FillRGBA( bx, by, ( bw * h ) / 100, bh, r, g, b, 220 );
+			int by = nameBottom;
+			FillRGBABlend( bx - 1, by - 1, bw + 2, bh + 2, 0, 0, 0, 160 );
+			FillRGBABlend( bx, by, ( bw * h ) / 100, bh, r, g, b, 220 );
 		}
 	}
 

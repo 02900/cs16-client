@@ -37,6 +37,7 @@ version.
 #include <string.h>
 #include "draw_util.h"
 #include "mp3font.h"
+#include "mp3textfont.h"
 
 // Max Payne 3 style chip behind a HUD number cluster (score chips solid black, timer light gray).
 // NOTE: FillRGBA is additive in this engine (black draws nothing) -> use FillRGBABlend so an
@@ -60,6 +61,7 @@ int CHudTimer::VidInit()
 {
 	m_HUD_timer = gHUD.GetSpriteIndex( "stopwatch" );
 	gMp3Font.Load();
+	gMp3Text.Load();
 	return 1;
 }
 
