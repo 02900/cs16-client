@@ -1,0 +1,15 @@
+{
+  "_comment": "Max Payne 3 level sections to export as GoldSrc maps into the cs16-client gamedir. Geometry comes from each level's collision mesh (.wbd/.wbn) via mp3-rpf-tools 'cs16-export'. The decoded geometry is Rockstar IP and is NOT committed -- run scripts/import_mp3_map.py against your own Max Payne 3 install. Only this manifest and the script are tracked; the work cache (.mp3cache/) and the installed .bsp/.wad (in the gamedir) are not.",
+
+  "_fields": "name (map/bsp name), archive (level .rpf path relative to the Max Payne 3 install root), entry (.wbd/.wbn name inside it). Optional: scale (units/metre, default 40), thickness, crop ('xmin,ymin,zmin,xmax,ymax,zmax' in MP3 metres -- carve one room), max_tris, texture (a PNG path, or a name resolved from the .mp3cache/png asset cache), tex_scale, spawns.",
+
+  "maps": [
+    {
+      "name": "mp3_vofarch",
+      "archive": "pc/levels/v_office/interiors/v_of_arch.rpf",
+      "entry": "milo_v_of_arch.wbd",
+      "scale": 40,
+      "crop": "-8,-8,-1,4,6,5"
+    }
+  ]
+}
