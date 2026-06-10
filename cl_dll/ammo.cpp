@@ -34,6 +34,8 @@
 #include "draw_util.h"
 #include "triangleapi.h"
 #include "weapontype.h"
+#include "mp3font.h"
+#include "mp3textfont.h"
 
 #ifndef M_PI
 #define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
@@ -285,7 +287,7 @@ int CHudAmmo::Init(void)
 	m_pClCrosshairSize = (convar_t*)CVAR_CREATE( "cl_crosshair_size", "auto", FCVAR_ARCHIVE );
 	m_pClDynamicCrosshair = CVAR_CREATE("cl_dynamiccrosshair", "1", FCVAR_ARCHIVE);
 	m_pClMp3Crosshair = CVAR_CREATE("cl_crosshair_mp3", "1", FCVAR_ARCHIVE);
-	m_iMp3CrossRing = m_iMp3CrossDot = 0;
+	m_iMp3CrossRing = m_iMp3CrossDot = m_iMp3AmmoIcon = 0;
 
 	m_hStaticSpr = 0;
 
@@ -359,6 +361,7 @@ int CHudAmmo::VidInit(void)
 		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
 		m_iMp3CrossRing = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_ring.png", NULL, 0, f );
 		m_iMp3CrossDot  = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_dot.png",  NULL, 0, f );
+		m_iMp3AmmoIcon  = gRenderAPI.GL_LoadTexture( "gfx/mp3/ammo_rifle.png",     NULL, 0, f );
 	}
 
 	return 1;
@@ -1089,6 +1092,33 @@ int CHudAmmo::Draw(float flTime)
 	// Does this weapon have a clip?
 	y = ScreenHeight - gHUD.m_iFontHeight - gHUD.m_iFontHeight/2;
 
+	// Max Payne 3 ammo: clip + reserve in the MP3 font with a cartridge icon, left of the
+	// health silhouette (bottom-right).
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+
+	if( gMp3Font.Ready() && cl_hud_mp3->value && m_pWeapon->iAmmoType > 0 && pw->iClip >= 0 )
+	{
+		int clip = pw->iClip;
+		int reserve = gWR.CountAmmo( pw->iAmmoType );
+
+		int H = YRES( 8 );          // same size for clip and reserve (bold HUD digit font)
+		int gap = XRES( 8 );
+		int clipW = gMp3Font.NumberWidth( clip, H );
+		int resW  = gMp3Font.NumberWidth( reserve, H );
+		int totalW = clipW + gap + resW;
+
+		// Max Payne 3: ammo below the health silhouette, right-aligned, no icon.
+		int rightEdge = ScreenWidth - XRES( 16 );
+		int xx = rightEdge - totalW;
+		int yb = ScreenHeight - YRES( 16 ) - H;
+
+		gMp3Font.DrawNumber( xx, yb, H, clip, 245, 245, 245, 255 );    // current clip: white
+		xx += clipW + gap;
+		gMp3Font.DrawNumber( xx, yb, H, reserve, 150, 150, 150, 235 ); // reserve: gray
+		return 1;
+	}
+
 	// Does weapon have any ammo at all?
 	if (m_pWeapon->iAmmoType > 0)
 	{
@@ -1605,24 +1635,18 @@ void CHudAmmo::DrawCrosshair()
 
 	// Max Payne 3 crosshair: a thin ring + center dot at screen center (replaces the dynamic
 	// lines). Scoped weapons returned above, so this only affects hip-fire weapons.
-	if ( m_pClMp3Crosshair && m_pClMp3Crosshair->value && g_iXash && m_iMp3CrossRing
+	if ( m_pClMp3Crosshair && m_pClMp3Crosshair->value && g_iXash && m_iMp3CrossDot
 	     && !( gHUD.m_iHideHUDDisplay & 1 ) )
 	{
 		int cx = ScreenWidth / 2;
 		int cy = ScreenHeight / 2;
-		int rs = XRES( 7 );  // ring half-size
-		int ds = XRES( 1 );  // dot half-size
+		int rs = XRES( 6 );  // reticle half-size
 
 		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
 		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
 		gEngfuncs.pTriAPI->Color4ub( 255, 255, 255, 235 );
-		gRenderAPI.GL_Bind( 0, m_iMp3CrossRing );
+		gRenderAPI.GL_Bind( 0, m_iMp3CrossDot );   // crosshairdot.png reticle, no extra center dot
 		DrawUtils::Draw2DQuad( cx - rs, cy - rs, cx + rs, cy + rs );
-		if ( m_iMp3CrossDot )
-		{
-			gRenderAPI.GL_Bind( 0, m_iMp3CrossDot );
-			DrawUtils::Draw2DQuad( cx - ds, cy - ds, cx + ds, cy + ds );
-		}
 		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
 		return;
 	}

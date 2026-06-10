@@ -30,6 +30,7 @@
 #include "eventscripts.h"
 
 #include "draw_util.h"
+#include "triangleapi.h"
 
 #include "ev_hldm.h"
 #include "com_weapons.h"
@@ -127,6 +128,13 @@ int CHudHealth::VidInit(void)
 
 	giDmgHeight = gHUD.GetSpriteRect(m_HUD_dmg_bio).Width();
 	giDmgWidth = gHUD.GetSpriteRect(m_HUD_dmg_bio).Height();
+
+	m_iMp3Silhouette = 0;
+	if( g_iXash )
+	{
+		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
+		m_iMp3Silhouette = gRenderAPI.GL_LoadTexture( "gfx/mp3/health_silhouette.png", NULL, 0, f );
+	}
 
 	return 1;
 }
@@ -271,6 +279,48 @@ void CHudHealth::DrawHealthBar( float flTime )
 	int r, g, b;
 	int a = 0, x, y;
 	int HealthWidth;
+
+	// Max Payne 3: a character silhouette at the bottom-right that fills bottom-up with health.
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+
+	if( g_iXash && m_iMp3Silhouette && cl_hud_mp3->value
+	    && ( gHUD.m_iWeaponBits & ( 1 << WEAPON_SUIT ) ) )
+	{
+		int hp = m_iHealth; if( hp < 0 ) hp = 0; if( hp > 100 ) hp = 100;
+		float frac = hp / 100.0f;              // remaining health fraction
+
+		int Hs = YRES( 56 );                   // silhouette height (texture is 64x128 -> 1:2)
+		int Ws = Hs / 2;
+		int ammoH = YRES( 22 );                // reserve room for the ammo line below the health
+		int sx = ScreenWidth  - XRES( 16 ) - Ws;
+		int sy = ScreenHeight - YRES( 16 ) - ammoH - YRES( 4 ) - Hs;
+		int splitY = sy + (int)( frac * Hs );  // above = remaining health, below = damage
+
+		gRenderAPI.GL_Bind( 0, m_iMp3Silhouette );
+		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+
+		// remaining health on top (neutral gray)
+		gEngfuncs.pTriAPI->Color4ub( 150, 150, 150, 225 );
+		gEngfuncs.pTriAPI->Begin( TRI_QUADS );
+		gEngfuncs.pTriAPI->TexCoord2f( 0, 0 );    gEngfuncs.pTriAPI->Vertex3f( sx,      sy,     0 );
+		gEngfuncs.pTriAPI->TexCoord2f( 1, 0 );    gEngfuncs.pTriAPI->Vertex3f( sx + Ws, sy,     0 );
+		gEngfuncs.pTriAPI->TexCoord2f( 1, frac ); gEngfuncs.pTriAPI->Vertex3f( sx + Ws, splitY, 0 );
+		gEngfuncs.pTriAPI->TexCoord2f( 0, frac ); gEngfuncs.pTriAPI->Vertex3f( sx,      splitY, 0 );
+		gEngfuncs.pTriAPI->End();
+
+		// damage on the bottom -- fixed color #4c211c, regardless of how much damage
+		gEngfuncs.pTriAPI->Color4ub( 0x4c, 0x21, 0x1c, 235 );
+		gEngfuncs.pTriAPI->Begin( TRI_QUADS );
+		gEngfuncs.pTriAPI->TexCoord2f( 0, frac ); gEngfuncs.pTriAPI->Vertex3f( sx,      splitY,  0 );
+		gEngfuncs.pTriAPI->TexCoord2f( 1, frac ); gEngfuncs.pTriAPI->Vertex3f( sx + Ws, splitY,  0 );
+		gEngfuncs.pTriAPI->TexCoord2f( 1, 1 );    gEngfuncs.pTriAPI->Vertex3f( sx + Ws, sy + Hs, 0 );
+		gEngfuncs.pTriAPI->TexCoord2f( 0, 1 );    gEngfuncs.pTriAPI->Vertex3f( sx,      sy + Hs, 0 );
+		gEngfuncs.pTriAPI->End();
+		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+		return;
+	}
 
 	GetPainColor( r, g, b, a );
 	DrawUtils::ScaleColors(r, g, b, a );

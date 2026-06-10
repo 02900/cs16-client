@@ -117,6 +117,7 @@ public:
 	int m_iHealth;
 	int m_HUD_dmg_bio;
 	int m_HUD_cross;
+	int m_iMp3Silhouette;   // gfx/mp3/health_silhouette.png (0 = use the CS number)
 	//float m_fAttackFront, m_fAttackRear, m_fAttackLeft, m_fAttackRight;
 	float m_fAttack[4];
 	void GetPainColor(int &r, int &g, int &b , int &a);

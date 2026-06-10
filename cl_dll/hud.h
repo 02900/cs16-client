@@ -241,6 +241,7 @@ private:
 	cvar_t *m_pClMp3Crosshair;
 	int m_iMp3CrossRing;
 	int m_iMp3CrossDot;
+	int m_iMp3AmmoIcon;   // gfx/mp3/ammo_rifle.png cartridge icon
 
 	// replace buggy engine's crosshair
 	HSPRITE m_hStaticSpr;
