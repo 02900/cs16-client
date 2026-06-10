@@ -1817,12 +1817,12 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 		Vector fwd, right, up;
 		AngleVectors( pparams->viewangles, fwd, right, up );
 
-		// Bullets are fired from the eye (current vieworg) along the aim angles. Trace that
-		// ray to the world/players to find the impact point we want centered on screen.
+		// Bullets are fired from the eye along the aim angles. The input code already traces that
+		// exact ray (same hull as the weapons) into g_vecAimImpact, so reuse it: converging the
+		// camera on it makes the screen-center reticle land where bullets actually hit.
 		Vector eye = pparams->vieworg;
 		Vector aimEnd = eye + fwd * 8192.0f;
-		pmtrace_t *tr = gEngfuncs.PM_TraceLine( eye, aimEnd, PM_TRACELINE_PHYSENTSONLY, 0, -1 );
-		Vector aimPoint = ( tr && !tr->startsolid && tr->fraction < 1.0f ) ? Vector( tr->endpos ) : aimEnd;
+		Vector aimPoint = g_bAimImpact ? Vector( g_vecAimImpact ) : aimEnd;
 
 		// Smoothly zoom the camera in while aiming (L2 / +aimassist).
 		static float curDist = 0.0f;

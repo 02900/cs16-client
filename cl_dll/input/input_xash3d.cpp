@@ -32,6 +32,7 @@ cvar_t	*aim_assist;			// master on/off
 cvar_t	*aim_assist_lock_fov;		// acquisition cone half-angle while the button is held (degrees)
 cvar_t	*aim_assist_pull;		// magnetism strength 0..1
 cvar_t	*aim_assist_slow;		// sticky slowdown factor applied to stick input
+cvar_t	*aim_assist_deadzone;		// free-aim cone as a multiple of the target's body size
 cvar_t	*aim_assist_range;		// max target distance (units)
 cvar_t	*aim_assist_wallcheck;		// require line of sight to the target
 cvar_t	*aim_assist_debug;		// debug overlay (text + head marker)
@@ -52,6 +53,12 @@ vec3_t g_vecAimEye   = { 0, 0, 0 };
 vec3_t g_vecAimFwd   = { 0, 0, 0 };
 vec3_t g_vecAimRight = { 0, 0, 0 };
 vec3_t g_vecAimUp    = { 0, 0, 0 };
+
+// world-space aim impact for the third-person crosshair (computed here where the eye/forward and
+// the player-trace are valid; the HUD just projects it). See ammo.cpp DrawCrosshair.
+vec3_t g_vecAimImpact = { 0, 0, 0 };
+bool   g_bAimImpact   = false;
+extern int cam_thirdperson;
 
 
 float ac_forwardmove;
@@ -401,18 +408,32 @@ void IN_Move( float frametime, usercmd_t *cmd )
 		}
 	}
 
-	// --- Aim assist: magnetism pull toward the target (only while steering) ---
+	// --- Aim assist: soft-lock magnetism (Max Payne 3 style) ---
+	// Free aim inside a cone the size of the target's body (aim at head/feet/hands); only pull the
+	// aim back when it drifts OUTSIDE that cone, and only gradually -- so when the target moves the
+	// aim lags slightly and the player nudges to re-align.
 	if( aaTarget && g_bAimAssistKey )
 	{
 		float dyaw   = aaDesired[YAW]   - viewangles[YAW];
 		float dpitch = aaDesired[PITCH] - viewangles[PITCH];
 		while( dyaw > 180.0f )  dyaw -= 360.0f; // shortest way around
 		while( dyaw < -180.0f ) dyaw += 360.0f;
-		float t = aim_assist_pull->value * frametime * AA_PULL_REF_FPS;
-		if( t > 1.0f ) t = 1.0f;
-		if( t < 0.0f ) t = 0.0f;
-		viewangles[YAW]   += dyaw * t;
-		viewangles[PITCH] += dpitch * t;
+
+		float ang  = sqrt( dyaw * dyaw + dpitch * dpitch );      // separation to center mass (deg)
+		float dist = g_flAimAssistDist > 1.0f ? g_flAimAssistDist : 1.0f;
+		float body = RAD2DEG( atan2( AA_TARGET_HALF_HEIGHT, dist ) ); // body angular half-size
+		float dead = body * aim_assist_deadzone->value;          // free-aim cone
+
+		if( ang > dead )
+		{
+			float keep = ( ang - dead ) / ang;                   // pull back only the excess
+			float t = aim_assist_pull->value * frametime * AA_PULL_REF_FPS;
+			if( t > 1.0f ) t = 1.0f;
+			if( t < 0.0f ) t = 0.0f;
+			viewangles[YAW]   += dyaw   * keep * t;
+			viewangles[PITCH] += dpitch * keep * t;
+		}
+		// inside the cone: no pull -> free aim within the target's body
 	}
 
 	if (viewangles[PITCH] > cl_pitchdown->value)
@@ -427,6 +448,42 @@ void IN_Move( float frametime, usercmd_t *cmd )
 	}
 
 	dead_viewangles = viewangles;
+
+	// Third-person crosshair: trace the real aim ray (final post-magnetism viewangles) from the
+	// player's eye and store the impact, so the HUD draws the reticle where bullets actually land.
+	// Done here (not in the HUD) because the eye height and the player-trace are valid in this
+	// input/prediction context, like the weapons and the aim assist above.
+	g_bAimImpact = false;
+	if( cam_thirdperson )
+	{
+		cl_entity_t *lp = gEngfuncs.GetLocalPlayer();
+		if( lp )
+		{
+			// Center on where the gun is actually aiming (trace impact), so the camera follows the
+			// player's fine adjustments (head/feet) and the reticle matches where bullets go. The
+			// soft-lock deadzone keeps the aim on the target's body, so this stays smooth.
+			vec3_t vofs = { 0, 0, 0 }, eye, fwd, right, up, end;
+			gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( vofs );
+			eye[0] = lp->origin[0] + vofs[0];
+			eye[1] = lp->origin[1] + vofs[1];
+			eye[2] = lp->origin[2] + vofs[2];
+			AngleVectors( viewangles, fwd, right, up );
+			end[0] = eye[0] + fwd[0] * 8192.0f;
+			end[1] = eye[1] + fwd[1] * 8192.0f;
+			end[2] = eye[2] + fwd[2] * 8192.0f;
+
+			pmtrace_t tr;
+			gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
+			gEngfuncs.pEventAPI->EV_PushPMStates();
+			gEngfuncs.pEventAPI->EV_SetSolidPlayers( -1 );
+			gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+			gEngfuncs.pEventAPI->EV_PlayerTrace( eye, end, PM_STUDIO_BOX, -1, &tr );
+			gEngfuncs.pEventAPI->EV_PopPMStates();
+
+			VectorCopy( tr.endpos, g_vecAimImpact );
+			g_bAimImpact = true;
+		}
+	}
 	
 	if( ac_movecount )
 	{
@@ -510,6 +567,7 @@ void IN_Init( void )
 	aim_assist_lock_fov        = gEngfuncs.pfnRegisterVariable( "aim_assist_lock_fov",        "45",      FCVAR_ARCHIVE );
 	aim_assist_pull            = gEngfuncs.pfnRegisterVariable( "aim_assist_pull",            "0.25",    FCVAR_ARCHIVE );
 	aim_assist_slow            = gEngfuncs.pfnRegisterVariable( "aim_assist_slow",            "0.4",     FCVAR_ARCHIVE );
+	aim_assist_deadzone        = gEngfuncs.pfnRegisterVariable( "aim_assist_deadzone",        "1.0",     FCVAR_ARCHIVE );
 	aim_assist_range           = gEngfuncs.pfnRegisterVariable( "aim_assist_range",           "1500",    FCVAR_ARCHIVE );
 	aim_assist_wallcheck       = gEngfuncs.pfnRegisterVariable( "aim_assist_wallcheck",       "1",       FCVAR_ARCHIVE );
 	aim_assist_debug           = gEngfuncs.pfnRegisterVariable( "aim_assist_debug",           "0",       FCVAR_ARCHIVE );

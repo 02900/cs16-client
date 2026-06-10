@@ -170,17 +170,19 @@ void DLLEXPORT CAM_Think( void )
 			break;
 	}
 
-	// OTS toggle: enter/exit third person when cam_thirdperson_enable changes (edge-triggered,
-	// so the legacy "thirdperson" command keeps working independently). Setting the flag directly
-	// bypasses the multiplayer gate, so it works on local/bot servers too.
+	// OTS camera: while cam_thirdperson_enable is on, force third person every frame so it survives
+	// level/respawn resets (a plain edge-trigger gets cleared on map load and never re-fires). When
+	// it turns off, drop back to first person. Setting the flag directly bypasses the multiplayer
+	// gate, so it works on local/bot servers too. The legacy "thirdperson" command still works while
+	// enable is off.
 	{
 		static int lastEnable = -1;
 		int en = cam_thirdperson_enable->value ? 1 : 0;
-		if( en != lastEnable )
-		{
-			cam_thirdperson = en;
-			lastEnable = en;
-		}
+		if( en )
+			cam_thirdperson = 1;
+		else if( lastEnable == 1 )
+			cam_thirdperson = 0;
+		lastEnable = en;
 	}
 
 	if( !cam_thirdperson )

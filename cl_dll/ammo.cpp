@@ -36,6 +36,7 @@
 #include "weapontype.h"
 #include "mp3font.h"
 #include "mp3textfont.h"
+#include "camera.h"
 
 #ifndef M_PI
 #define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
@@ -1113,9 +1114,9 @@ int CHudAmmo::Draw(float flTime)
 		int xx = rightEdge - totalW;
 		int yb = ScreenHeight - YRES( 16 ) - H;
 
-		gMp3Font.DrawNumber( xx, yb, H, clip, 245, 245, 245, 255 );    // current clip: white
+		gMp3Font.DrawNumberOutlined( xx, yb, H, clip, 245, 245, 245, 255 );    // current clip: white
 		xx += clipW + gap;
-		gMp3Font.DrawNumber( xx, yb, H, reserve, 150, 150, 150, 235 ); // reserve: gray
+		gMp3Font.DrawNumberOutlined( xx, yb, H, reserve, 150, 150, 150, 235 ); // reserve: gray
 		return 1;
 	}
 
@@ -1638,6 +1639,8 @@ void CHudAmmo::DrawCrosshair()
 	if ( m_pClMp3Crosshair && m_pClMp3Crosshair->value && g_iXash && m_iMp3CrossDot
 	     && !( gHUD.m_iHideHUDDisplay & 1 ) )
 	{
+		// Always centered: in third person the OTS camera converges on the aim impact (view.cpp),
+		// so the screen center already shows where bullets land.
 		int cx = ScreenWidth / 2;
 		int cy = ScreenHeight / 2;
 		int rs = XRES( 6 );  // reticle half-size

@@ -84,6 +84,27 @@ int CHudAimAssist::Draw( float flTime )
 	snprintf( line, sizeof( line ), "applying: %s", g_bAimAssistApplying ? "YES" : "no" );
 	DrawUtils::DrawHudString( x, y, ScreenWidth, line, 255, 255, 255 );
 
+	// Aim debug: the bullet path (eye -> impact) as projected red dots, plus the impact (cyan) and
+	// screen center (yellow). The impact is where bullets go / what the OTS camera centers on.
+	if( g_bAimImpact )
+	{
+		for( int s = 1; s <= 80; s++ )
+		{
+			float t = s / 80.0f;
+			vec3_t p;
+			p[0] = g_vecAimEye[0] + ( g_vecAimImpact[0] - g_vecAimEye[0] ) * t;
+			p[1] = g_vecAimEye[1] + ( g_vecAimImpact[1] - g_vecAimEye[1] ) * t;
+			p[2] = g_vecAimEye[2] + ( g_vecAimImpact[2] - g_vecAimEye[2] ) * t;
+			int px, py;
+			if( AA_Project( p, px, py ) )
+				FillRGBA( px - 2, py - 2, 3, 3, 255, 40, 40, 255 );
+		}
+		int ipx, ipy;
+		if( AA_Project( g_vecAimImpact, ipx, ipy ) )
+			FillRGBA( ipx - 6, ipy - 6, 12, 12, 0, 255, 255, 255 );  // CYAN = impact (where bullets land)
+		FillRGBA( ScreenWidth / 2 - 6, ScreenHeight / 2 - 6, 12, 12, 255, 255, 0, 255 ); // YELLOW = center
+	}
+
 	// --- view cone + computed aim direction (to diagnose eye/forward) ---
 	// magenta dot = where the assist thinks you aim (eye + fwd). It MUST sit on
 	// your crosshair (screen center); if it is off-center, eye/forward is wrong.
