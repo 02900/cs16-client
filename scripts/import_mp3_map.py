@@ -96,6 +96,17 @@ def export_one(tool_entry, mp3_dir, work, m, force):
     return outdir
 
 
+# Per-stage flags. The map is a dense func_detail mesh -> a huge portal set, so
+# full VIS is pathologically slow; -fast VIS (approximate PVS) is the difference
+# between seconds and tens of minutes. RAD also runs -fast for a quick demo bake.
+_VHLT_FLAGS = {
+    "hlcsg": ["-nowadtextures", "-wadinclude"],   # -wadinclude takes <name> (added below)
+    "hlbsp": [],
+    "hlvis": ["-fast"],
+    "hlrad": ["-fast"],
+}
+
+
 def compile_one(vhlt_dir, outdir, name):
     """Run the four VHLT stages in outdir. Returns the .bsp path or None."""
     for stage in _VHLT_STAGES:
@@ -103,10 +114,11 @@ def compile_one(vhlt_dir, outdir, name):
         if not tool:
             print("  [warn] %s not found in %s -- cannot compile" % (stage, vhlt_dir))
             return None
+        cmd = [tool] + list(_VHLT_FLAGS[stage])
         if stage == "hlcsg":
-            run([tool, "-nowadtextures", "-wadinclude", name, name], cwd=outdir)
-        else:
-            run([tool, name], cwd=outdir)
+            cmd.append(name)              # -wadinclude <name>
+        cmd.append(name)
+        run(cmd, cwd=outdir)
     bsp = os.path.join(outdir, name + ".bsp")
     return bsp if os.path.isfile(bsp) else None
 
