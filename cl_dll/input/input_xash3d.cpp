@@ -54,12 +54,6 @@ vec3_t g_vecAimFwd   = { 0, 0, 0 };
 vec3_t g_vecAimRight = { 0, 0, 0 };
 vec3_t g_vecAimUp    = { 0, 0, 0 };
 
-// world-space aim impact for the third-person crosshair (computed here where the eye/forward and
-// the player-trace are valid; the HUD just projects it). See ammo.cpp DrawCrosshair.
-vec3_t g_vecAimImpact = { 0, 0, 0 };
-bool   g_bAimImpact   = false;
-extern int cam_thirdperson;
-
 
 float ac_forwardmove;
 float ac_sidemove;
@@ -449,42 +443,6 @@ void IN_Move( float frametime, usercmd_t *cmd )
 
 	dead_viewangles = viewangles;
 
-	// Third-person crosshair: trace the real aim ray (final post-magnetism viewangles) from the
-	// player's eye and store the impact, so the HUD draws the reticle where bullets actually land.
-	// Done here (not in the HUD) because the eye height and the player-trace are valid in this
-	// input/prediction context, like the weapons and the aim assist above.
-	g_bAimImpact = false;
-	if( cam_thirdperson )
-	{
-		cl_entity_t *lp = gEngfuncs.GetLocalPlayer();
-		if( lp )
-		{
-			// Center on where the gun is actually aiming (trace impact), so the camera follows the
-			// player's fine adjustments (head/feet) and the reticle matches where bullets go. The
-			// soft-lock deadzone keeps the aim on the target's body, so this stays smooth.
-			vec3_t vofs = { 0, 0, 0 }, eye, fwd, right, up, end;
-			gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( vofs );
-			eye[0] = lp->origin[0] + vofs[0];
-			eye[1] = lp->origin[1] + vofs[1];
-			eye[2] = lp->origin[2] + vofs[2];
-			AngleVectors( viewangles, fwd, right, up );
-			end[0] = eye[0] + fwd[0] * 8192.0f;
-			end[1] = eye[1] + fwd[1] * 8192.0f;
-			end[2] = eye[2] + fwd[2] * 8192.0f;
-
-			pmtrace_t tr;
-			gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
-			gEngfuncs.pEventAPI->EV_PushPMStates();
-			gEngfuncs.pEventAPI->EV_SetSolidPlayers( -1 );
-			gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
-			gEngfuncs.pEventAPI->EV_PlayerTrace( eye, end, PM_STUDIO_BOX, -1, &tr );
-			gEngfuncs.pEventAPI->EV_PopPMStates();
-
-			VectorCopy( tr.endpos, g_vecAimImpact );
-			g_bAimImpact = true;
-		}
-	}
-	
 	if( ac_movecount )
 	{
 		IN_ToggleButtons( ac_forwardmove / ac_movecount, ac_sidemove / ac_movecount );
@@ -568,7 +526,7 @@ void IN_Init( void )
 	aim_assist_pull            = gEngfuncs.pfnRegisterVariable( "aim_assist_pull",            "0.25",    FCVAR_ARCHIVE );
 	aim_assist_slow            = gEngfuncs.pfnRegisterVariable( "aim_assist_slow",            "0.4",     FCVAR_ARCHIVE );
 	aim_assist_deadzone        = gEngfuncs.pfnRegisterVariable( "aim_assist_deadzone",        "1.0",     FCVAR_ARCHIVE );
-	aim_assist_range           = gEngfuncs.pfnRegisterVariable( "aim_assist_range",           "1500",    FCVAR_ARCHIVE );
+	aim_assist_range           = gEngfuncs.pfnRegisterVariable( "aim_assist_range",           "2250",    FCVAR_ARCHIVE );
 	aim_assist_wallcheck       = gEngfuncs.pfnRegisterVariable( "aim_assist_wallcheck",       "1",       FCVAR_ARCHIVE );
 	aim_assist_debug           = gEngfuncs.pfnRegisterVariable( "aim_assist_debug",           "0",       FCVAR_ARCHIVE );
 	aim_assist_highlight       = gEngfuncs.pfnRegisterVariable( "aim_assist_highlight",       "0",       FCVAR_ARCHIVE );

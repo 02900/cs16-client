@@ -1814,15 +1814,20 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 		// converges on the player's actual aim point so the screen-center reticle matches
 		// where bullets go. Firing is unchanged (server uses the input angles from the eye);
 		// we only retarget the render camera here, so there is no feedback loop.
+		// Use the player's RAW aim (cl_viewangles, WITHOUT the visual recoil punch) for the aim ray:
+		// bullets go along that direction, while the punch only kicks the view. Including the punch
+		// here pushed the reticle off the decal. Trace at render time from the render eye and hull so
+		// it matches the weapon's own trace.
 		Vector fwd, right, up;
-		AngleVectors( pparams->viewangles, fwd, right, up );
+		AngleVectors( pparams->cl_viewangles, fwd, right, up );
 
-		// Bullets are fired from the eye along the aim angles. The input code already traces that
-		// exact ray (same hull as the weapons) into g_vecAimImpact, so reuse it: converging the
-		// camera on it makes the screen-center reticle land where bullets actually hit.
-		Vector eye = pparams->vieworg;
+		Vector eye = pparams->vieworg; // simorg + viewheight = the gun's eye, like EV_GetGunPosition
 		Vector aimEnd = eye + fwd * 8192.0f;
-		Vector aimPoint = g_bAimImpact ? Vector( g_vecAimImpact ) : aimEnd;
+
+		// EV_PlayerTrace returns nothing in the view-calc context (it converged on the 8192 far point);
+		// PM_TraceLine works here. Use the standing hull (2) so it hits the same point as the bullet.
+		pmtrace_t *tr = gEngfuncs.PM_TraceLine( eye, aimEnd, PM_TRACELINE_PHYSENTSONLY, 2, -1 );
+		Vector aimPoint = ( tr && tr->fraction < 1.0f ) ? Vector( tr->endpos ) : aimEnd;
 
 		// Smoothly zoom the camera in while aiming (L2 / +aimassist).
 		static float curDist = 0.0f;
@@ -1834,7 +1839,7 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 
 		// Camera position: behind + shoulder/height offset, kept out of walls.
 		Vector camStart = eye + right * cam_ots_side->value + up * cam_ots_up->value;
-		V_GetChaseOrigin( pparams->viewangles, camStart, curDist, pparams->vieworg );
+		V_GetChaseOrigin( pparams->cl_viewangles, camStart, curDist, pparams->vieworg );
 
 		// Converge: point the camera at the impact point (reticle == point of impact).
 		Vector look = aimPoint - Vector( pparams->vieworg );

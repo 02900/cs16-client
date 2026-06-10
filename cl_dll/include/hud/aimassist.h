@@ -20,8 +20,6 @@ extern vec3_t g_vecAimFwd;   // view forward
 extern vec3_t g_vecAimRight; // view right
 extern vec3_t g_vecAimUp;    // view up
 
-extern vec3_t g_vecAimImpact; // world-space point the gun is aiming at (third-person crosshair)
-extern bool   g_bAimImpact;   // g_vecAimImpact is valid this frame (third person only)
 
 extern cvar_t *aim_assist;            // master on/off (shown in the overlay)
 extern cvar_t *aim_assist_debug;      // text overlay + floating head marker
