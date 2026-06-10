@@ -128,12 +128,12 @@ int CHudDeathNotice :: Draw( float flTime )
 				int base1 = base2 - lineH;             // killer baseline
 
 				if ( !rgDeathNoticeList[i].bSuicide )
-					gMp3Text.DrawString( x, base1, H, rgDeathNoticeList[i].szKiller, 255, 255, 255, 255 );
+					gMp3Text.DrawStringOutlined( x, base1, H, rgDeathNoticeList[i].szKiller, 255, 255, 255, 255 );
 
-				int vx = gMp3Text.DrawString( x, base2, H, weap, wr, wg, wb, 255 );
+				int vx = gMp3Text.DrawStringOutlined( x, base2, H, weap, wr, wg, wb, 255 );
 				vx += XRES( 6 );
 				if ( !rgDeathNoticeList[i].bNonPlayerKill )
-					gMp3Text.DrawString( vx, base2, H, rgDeathNoticeList[i].szVictim, 235, 60, 60, 255 );
+					gMp3Text.DrawStringOutlined( vx, base2, H, rgDeathNoticeList[i].szVictim, 235, 60, 60, 255 );
 			}
 			else
 			{

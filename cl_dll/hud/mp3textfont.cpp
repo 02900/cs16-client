@@ -139,3 +139,16 @@ int CMp3TextFont::DrawString( int x, int baselineY, int H, const char *s, int r,
 	gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
 	return (int)pen;
 }
+
+int CMp3TextFont::DrawStringOutlined( int x, int by, int H, const char *s, int r, int g, int b, int a )
+{
+	if( !m_iTex || !s )
+		return x;
+	int t = H / 12;
+	if( t < 1 ) t = 1;             // outline thickness
+	for( int dy = -t; dy <= t; dy += t )
+		for( int dx = -t; dx <= t; dx += t )
+			if( dx || dy )
+				DrawString( x + dx, by + dy, H, s, 0, 0, 0, a );
+	return DrawString( x, by, H, s, r, g, b, a );
+}

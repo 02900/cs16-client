@@ -99,3 +99,15 @@ void CMp3Font::DrawNumber( int x, int y, int h, int number, int r, int g, int b,
 		x += DigitWidth( d, h ) + gap;
 	}
 }
+
+void CMp3Font::DrawNumberOutlined( int x, int y, int h, int number, int r, int g, int b, int a )
+{
+	if( !m_iTex )
+		return;
+	int t = max( 1, h / 12 );   // outline thickness
+	for( int dy = -t; dy <= t; dy += t )
+		for( int dx = -t; dx <= t; dx += t )
+			if( dx || dy )
+				DrawNumber( x + dx, y + dy, h, number, 0, 0, 0, a );
+	DrawNumber( x, y, h, number, r, g, b, a );
+}

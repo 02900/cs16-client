@@ -123,7 +123,7 @@ int CHudPlayerNames::Draw( float flTime )
 		if( gMp3Text.Ready() )
 		{
 			len = gMp3Text.StringWidth( name, H );
-			gMp3Text.DrawString( sx - len / 2, sy + H, H, name, r, g, b, 255 );  // baseline = sy + H
+			gMp3Text.DrawStringOutlined( sx - len / 2, sy + H, H, name, r, g, b, 255 );  // baseline = sy + H
 			nameBottom = sy + (int)( H * 1.35f );
 		}
 		else

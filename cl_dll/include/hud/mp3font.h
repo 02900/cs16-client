@@ -16,6 +16,8 @@ public:
 	int  NumberWidth( int number, int h ) const;  // on-screen width of a whole number at height h
 	void DrawDigit( int x, int y, int h, int digit, int r, int g, int b, int a );
 	void DrawNumber( int x, int y, int h, int number, int r, int g, int b, int a );
+	// same as DrawNumber but with a dark outline behind it for readability
+	void DrawNumberOutlined( int x, int y, int h, int number, int r, int g, int b, int a );
 
 private:
 	int m_iTex;

@@ -15,6 +15,8 @@ public:
 	int  StringWidth( const char *s, int H ) const;   // on-screen width at cap height H (px)
 	// draw a string with its baseline at y; returns the pen x after the string
 	int  DrawString( int x, int baselineY, int H, const char *s, int r, int g, int b, int a );
+	// same as DrawString but with a dark outline behind it for readability
+	int  DrawStringOutlined( int x, int baselineY, int H, const char *s, int r, int g, int b, int a );
 
 private:
 	int m_iTex;
