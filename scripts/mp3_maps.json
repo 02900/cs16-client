@@ -9,7 +9,7 @@
       "archive": "pc/levels/v_office/interiors/v_of_arch.rpf",
       "entry": "milo_v_of_arch.wbd",
       "scale": 40,
-      "crop": "-8,-8,-1,4,6,5"
+      "crop": "-6,-6,-1,2,2,4"
     }
   ]
 }
