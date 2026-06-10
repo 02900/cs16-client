@@ -2,6 +2,9 @@
 # See scripts/import_mp3_assets.py + scripts/mp3_assets.json.
 .mp3cache/
 
+# Local dev notes + runtime debug dumps (aimdebug.txt, deadzonedebug.txt, etc.)
+.devnotes/
+
 # Compiled Object files
 *.slo
 *.lo

@@ -12,6 +12,7 @@
 #include "event_api.h"
 #include "pm_defs.h"
 #include <math.h>
+#include <stdio.h> // aim_assist_debug>=2 file logging (.devnotes/deadzonedebug.txt)
 
 #define	PITCH	0
 #define	YAW		1
@@ -32,7 +33,8 @@ cvar_t	*aim_assist;			// master on/off
 cvar_t	*aim_assist_lock_fov;		// acquisition cone half-angle while the button is held (degrees)
 cvar_t	*aim_assist_pull;		// magnetism strength 0..1
 cvar_t	*aim_assist_slow;		// sticky slowdown factor applied to stick input
-cvar_t	*aim_assist_deadzone;		// free-aim cone as a multiple of the target's body size
+cvar_t	*aim_assist_deadzone;		// free-aim cone (inner ring) as a multiple of the target's body size
+cvar_t	*aim_assist_cap;		// hard clamp (outer ring) as a multiple of the free-aim cone
 cvar_t	*aim_assist_range;		// max target distance (units)
 cvar_t	*aim_assist_wallcheck;		// require line of sight to the target
 cvar_t	*aim_assist_debug;		// debug overlay (text + head marker)
@@ -47,6 +49,9 @@ float g_flAimAssistDist = 0.0f;		// distance to the chosen target
 float g_flAimAssistAngle = 0.0f;	// angular separation (deg) to the chosen target
 int   g_iAimAssistNearestIdx = 0;	// nearest visible enemy by angle, ignoring the cone
 float g_flAimAssistNearestAngle = 0.0f;	// its angle (diagnose a too-tight cone)
+float g_flAimAssistDeadCone = 0.0f;	// soft-lock free-aim cone half-angle (deg, inner ring); 0 = no lock
+float g_flAimAssistCapCone  = 0.0f;	// soft-lock hard-clamp half-angle (deg, outer ring); 0 = no lock
+                                    // (consumed by the debug gizmo in hud/aimassist.cpp)
 
 // view basis used by the assist, stored each frame for the debug cone visualization
 vec3_t g_vecAimEye   = { 0, 0, 0 };
@@ -285,6 +290,56 @@ static cl_entity_t *AimAssist_FindTarget( float *eye, float *fwd )
 	return best;
 }
 
+// --- Deadzone debug logging (aim_assist_debug>=2) ---------------------------------
+// Dumps soft-lock telemetry to .devnotes/deadzonedebug.txt (gitignored). See the recap
+// in .devnotes/aim-debug-to-file.md for why we log to a file instead of an overlay.
+#define AA_DBG_PATH	"C:/Users/ortiz/Documents/repositories/cs16-client/.devnotes/deadzonedebug.txt"
+#define AA_DBG_HZ	0.1f	// sample period (~10 Hz) so the file does not flood
+
+static bool  s_aaPrevLocked = false;	// was the soft-lock active last frame (for the end summary)
+static float s_aaLogAccum   = 0.0f;	// time accumulator for the sample throttle
+static float s_aaPeakDev    = 0.0f;	// max angular deviation reached this lock session (deg)
+static float s_aaLastDist   = 0.0f;	// last seen values, for the session summary
+static float s_aaLastCone   = 0.0f;
+static float s_aaLastCap    = 0.0f;
+
+static void AimAssist_LogDeadzone( float frametime, float dist, float body, float dead, float cap, float ang, bool pulling, bool clamped )
+{
+	if( ang > s_aaPeakDev ) s_aaPeakDev = ang; // track the peak even on throttled frames
+	s_aaLastDist = dist;
+	s_aaLastCone = dead;
+	s_aaLastCap  = cap;
+
+	s_aaLogAccum += frametime;
+	if( s_aaLogAccum < AA_DBG_HZ )
+		return;
+	s_aaLogAccum = 0.0f;
+
+	float lateral = dist * tan( DEG2RAD( dead ) ); // off-center units the crosshair may sit at this range
+	const char *state = clamped ? "CLAMPED" : ( pulling ? "PULLING" : "free" );
+	FILE *fp = fopen( AA_DBG_PATH, "a" );
+	if( !fp )
+		return;
+	fprintf( fp, "dist %5.0f  body %5.2f  free %5.2f deg (= %5.0f u)  cap %5.2f deg  curDev %5.2f deg  peak %5.2f deg  %s\n",
+		dist, body, dead, lateral, cap, ang, s_aaPeakDev, state );
+	fclose( fp );
+}
+
+static void AimAssist_LogDeadzoneEnd( void )
+{
+	float ratio = s_aaLastCone > 0.0f ? s_aaPeakDev / s_aaLastCone : 0.0f;
+	FILE *fp = fopen( AA_DBG_PATH, "a" );
+	if( fp )
+	{
+		fprintf( fp, "=== lock end === dist %.0f  free %.2f deg  cap %.2f deg  peakDev %.2f deg  (peak/free = %.2f  %s)\n\n",
+			s_aaLastDist, s_aaLastCone, s_aaLastCap, s_aaPeakDev, ratio,
+			s_aaPeakDev > s_aaLastCap + 0.01f ? "ESCAPED CAP(!)" : ( ratio >= 1.0f ? "held between rings" : "stayed in free zone" ) );
+		fclose( fp );
+	}
+	s_aaPeakDev = 0.0f;
+	s_aaLogAccum = 0.0f;
+}
+
 // Rotate camera and add move values to usercmd
 void IN_Move( float frametime, usercmd_t *cmd )
 {
@@ -416,9 +471,15 @@ void IN_Move( float frametime, usercmd_t *cmd )
 		float ang  = sqrt( dyaw * dyaw + dpitch * dpitch );      // separation to center mass (deg)
 		float dist = g_flAimAssistDist > 1.0f ? g_flAimAssistDist : 1.0f;
 		float body = RAD2DEG( atan2( AA_TARGET_HALF_HEIGHT, dist ) ); // body angular half-size
-		float dead = body * aim_assist_deadzone->value;          // free-aim cone
+		float dead = body * aim_assist_deadzone->value;          // free-aim cone (inner ring)
+		float cap  = dead * aim_assist_cap->value;               // hard clamp (outer ring)
 
-		if( ang > dead )
+		// Two rings: free aim inside `dead` (no pull), soft spring between `dead` and `cap`, and a
+		// HARD wall at `cap` -- the aim can never drift past the outer ring, so it never loses the
+		// target. dyaw/dpitch is the offset from the target toward the current view (so we can both
+		// pull it back and clamp it).
+		bool pulling = ( ang > dead );
+		if( pulling )
 		{
 			float keep = ( ang - dead ) / ang;                   // pull back only the excess
 			float t = aim_assist_pull->value * frametime * AA_PULL_REF_FPS;
@@ -428,7 +489,45 @@ void IN_Move( float frametime, usercmd_t *cmd )
 			viewangles[PITCH] += dpitch * keep * t;
 		}
 		// inside the cone: no pull -> free aim within the target's body
+
+		// hard clamp at the outer ring: recompute the offset after the spring and pin it to `cap`
+		bool clamped = false;
+		if( cap > 0.0f )
+		{
+			float ovyaw   = viewangles[YAW]   - aaDesired[YAW];  // view offset from target (deg)
+			float ovpitch = viewangles[PITCH] - aaDesired[PITCH];
+			while( ovyaw > 180.0f )  ovyaw -= 360.0f;
+			while( ovyaw < -180.0f ) ovyaw += 360.0f;
+			float ov = sqrt( ovyaw * ovyaw + ovpitch * ovpitch );
+			if( ov > cap )
+			{
+				float s = cap / ov;                              // scale the offset back onto the ring
+				viewangles[YAW]   = aaDesired[YAW]   + ovyaw   * s;
+				viewangles[PITCH] = aaDesired[PITCH] + ovpitch * s;
+				clamped = true;
+			}
+		}
+
+		g_flAimAssistDeadCone = dead; // expose both cones to the debug gizmo
+		g_flAimAssistCapCone  = cap;
+
+		// --- DEBUG (aim_assist_debug>=2): dump deadzone telemetry to disk ---
+		// Same "numbers to a file" trick as the decal bug (see .devnotes/aim-debug-to-file.md):
+		// log how far the aim can drift before the magnet pulls, vs how far it actually drifted.
+		if( aim_assist_debug->value >= 2.0f )
+		{
+			AimAssist_LogDeadzone( frametime, dist, body, dead, cap, ang, pulling, clamped );
+			s_aaPrevLocked = true;
+		}
 	}
+	else if( s_aaPrevLocked && aim_assist_debug->value >= 2.0f )
+	{
+		AimAssist_LogDeadzoneEnd(); // lock released or target lost: write the session summary
+		s_aaPrevLocked = false;
+	}
+
+	if( !( aaTarget && g_bAimAssistKey ) )
+		g_flAimAssistDeadCone = g_flAimAssistCapCone = 0.0f; // no lock -> hide the gizmo
 
 	if (viewangles[PITCH] > cl_pitchdown->value)
 		viewangles[PITCH] = cl_pitchdown->value;
@@ -526,6 +625,7 @@ void IN_Init( void )
 	aim_assist_pull            = gEngfuncs.pfnRegisterVariable( "aim_assist_pull",            "0.25",    FCVAR_ARCHIVE );
 	aim_assist_slow            = gEngfuncs.pfnRegisterVariable( "aim_assist_slow",            "0.4",     FCVAR_ARCHIVE );
 	aim_assist_deadzone        = gEngfuncs.pfnRegisterVariable( "aim_assist_deadzone",        "1.0",     FCVAR_ARCHIVE );
+	aim_assist_cap             = gEngfuncs.pfnRegisterVariable( "aim_assist_cap",             "2.0",     FCVAR_ARCHIVE );
 	aim_assist_range           = gEngfuncs.pfnRegisterVariable( "aim_assist_range",           "2250",    FCVAR_ARCHIVE );
 	aim_assist_wallcheck       = gEngfuncs.pfnRegisterVariable( "aim_assist_wallcheck",       "1",       FCVAR_ARCHIVE );
 	aim_assist_debug           = gEngfuncs.pfnRegisterVariable( "aim_assist_debug",           "0",       FCVAR_ARCHIVE );
