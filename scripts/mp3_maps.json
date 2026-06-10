@@ -1,15 +1,27 @@
 {
   "_comment": "Max Payne 3 level sections to export as GoldSrc maps into the cs16-client gamedir. Geometry comes from each level's collision mesh (.wbd/.wbn) via mp3-rpf-tools 'cs16-export'. The decoded geometry is Rockstar IP and is NOT committed -- run scripts/import_mp3_map.py against your own Max Payne 3 install. Only this manifest and the script are tracked; the work cache (.mp3cache/) and the installed .bsp/.wad (in the gamedir) are not.",
 
-  "_fields": "name (map/bsp name), archive (level .rpf path relative to the Max Payne 3 install root), entry (.wbd/.wbn name inside it). Optional: scale (units/metre, default 40), thickness, crop ('xmin,ymin,zmin,xmax,ymax,zmax' in MP3 metres -- carve one room), max_tris, tex_scale, spawns. Textures are real level textures assigned by face orientation: tex_floor / tex_wall / tex_ceiling are .wtd texture names from the level (auto-picked by keyword if omitted); 'texture' (a PNG path) overrides all three with one image.",
+  "_fields": "name (map/bsp name), archive (level .rpf path relative to the Max Payne 3 install root), entry (.wbd/.wbn name inside it). Optional: scale (units/metre, default 40), thickness, crop ('xmin,ymin,zmin,xmax,ymax,zmax' in MP3 metres -- carve one room), voxel (rasterize to axis-aligned boxes of N metres -- the only way a whole level fits; smaller = more detail + brushes), max_tris, tex_scale, spawns. Textures are real level textures assigned by face orientation: tex_floor / tex_wall / tex_ceiling are .wtd texture names from the level (auto-picked by keyword if omitted); 'texture' (a PNG path) overrides all three with one image.",
 
   "maps": [
     {
       "name": "mp3_vofarch",
+      "_note": "one room, faithful per-triangle collision (best detail)",
       "archive": "pc/levels/v_office/interiors/v_of_arch.rpf",
       "entry": "milo_v_of_arch.wbd",
       "scale": 40,
       "crop": "-6,-6,-1,2,2,4",
+      "tex_floor": "wood_floor_08_d",
+      "tex_wall": "ofc_officewall_d",
+      "tex_ceiling": "of_wallwht_02_dm"
+    },
+    {
+      "name": "mp3_vofarch_full",
+      "_note": "the WHOLE level, voxelized to 0.3 m boxes (blocky but complete)",
+      "archive": "pc/levels/v_office/interiors/v_of_arch.rpf",
+      "entry": "milo_v_of_arch.wbd",
+      "scale": 40,
+      "voxel": 0.3,
       "tex_floor": "wood_floor_08_d",
       "tex_wall": "ofc_officewall_d",
       "tex_ceiling": "of_wallwht_02_dm"
