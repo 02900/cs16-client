@@ -6,7 +6,8 @@
 	url = https://github.com/02900/mainui_cpp
 [submodule "3rdparty/ReGameDLL_CS"]
 	path = 3rdparty/ReGameDLL_CS
-	url = https://github.com/Velaron/ReGameDLL_CS
+	url = https://github.com/02900/ReGameDLL_CS
+	branch = cs16client-custom
 [submodule "3rdparty/miniutl"]
 	path = 3rdparty/miniutl
 	url = https://github.com/FWGS/MiniUTL
