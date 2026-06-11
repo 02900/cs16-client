@@ -241,7 +241,12 @@ private:
 	cvar_t *m_pClMp3Crosshair;
 	int m_iMp3CrossRing;
 	int m_iMp3CrossDot;
+	int m_iMp3CrossKill;  // gfx/mp3/crosshair_kill.png X shown briefly on a kill
 	int m_iMp3AmmoIcon;   // gfx/mp3/ammo_rifle.png cartridge icon
+	float m_flKillConfirmUntil; // crosshair shows the kill X while gHUD.m_flTime < this
+
+public:
+	void NotifyKillConfirm( void ); // called from the death notice on a local kill
 
 	// replace buggy engine's crosshair
 	HSPRITE m_hStaticSpr;

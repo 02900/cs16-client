@@ -38,6 +38,9 @@
 #include "mp3palette.h"
 #include "mp3textfont.h"
 #include "camera.h"
+#include "event_api.h"
+#include "pm_defs.h"
+#include "pmtrace.h"
 
 #ifndef M_PI
 #define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
@@ -289,7 +292,8 @@ int CHudAmmo::Init(void)
 	m_pClCrosshairSize = (convar_t*)CVAR_CREATE( "cl_crosshair_size", "auto", FCVAR_ARCHIVE );
 	m_pClDynamicCrosshair = CVAR_CREATE("cl_dynamiccrosshair", "1", FCVAR_ARCHIVE);
 	m_pClMp3Crosshair = CVAR_CREATE("cl_crosshair_mp3", "1", FCVAR_ARCHIVE);
-	m_iMp3CrossRing = m_iMp3CrossDot = m_iMp3AmmoIcon = 0;
+	m_iMp3CrossRing = m_iMp3CrossDot = m_iMp3CrossKill = m_iMp3AmmoIcon = 0;
+	m_flKillConfirmUntil = 0.0f;
 
 	m_hStaticSpr = 0;
 
@@ -363,6 +367,7 @@ int CHudAmmo::VidInit(void)
 		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
 		m_iMp3CrossRing = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_ring.png", NULL, 0, f );
 		m_iMp3CrossDot  = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_dot.png",  NULL, 0, f );
+		m_iMp3CrossKill = gRenderAPI.GL_LoadTexture( "gfx/mp3/crosshair_kill.png", NULL, 0, f );
 		m_iMp3AmmoIcon  = gRenderAPI.GL_LoadTexture( "gfx/mp3/ammo_rifle.png",     NULL, 0, f );
 	}
 
@@ -1622,6 +1627,64 @@ void CHudAmmo::DrawCrosshair( int weaponId )
 	}
 }
 
+// Crosshair briefly shows the MP3 kill X after the local player downs an enemy
+void CHudAmmo::NotifyKillConfirm( void )
+{
+	m_flKillConfirmUntil = gHUD.m_flTime + 0.5f;
+}
+
+// True when the player's aim ray (the same one bullets follow: eye along the view angles,
+// hull 2) rests on a live enemy -- used to tint the MP3 reticle red (hit feedback).
+static bool Mp3CrossOnEnemy( void )
+{
+	cl_entity_t *local = gEngfuncs.GetLocalPlayer();
+	if( !local )
+		return false;
+
+	vec3_t angles, fwd, right, up;
+	gEngfuncs.GetViewAngles( angles );
+	AngleVectors( angles, fwd, right, up );
+
+	vec3_t viewofs = { 0, 0, 0 };
+	gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( viewofs );
+	vec3_t eye, end;
+	for( int j = 0; j < 3; j++ )
+	{
+		eye[j] = local->origin[j] + viewofs[j];
+		end[j] = eye[j] + fwd[j] * 8192.0f;
+	}
+
+	pmtrace_t tr;
+	gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
+	gEngfuncs.pEventAPI->EV_PushPMStates();
+	// solid players EXCEPT ourselves (same idiom as the bullet trace in ev_cs16.cpp) --
+	// with the local player solid the ray starts inside our own hull and hits us instantly
+	gEngfuncs.pEventAPI->EV_SetSolidPlayers( gHUD.m_Scoreboard.m_iPlayerNum - 1 );
+	gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+	gEngfuncs.pEventAPI->EV_PlayerTrace( eye, end, PM_STUDIO_BOX, -1, &tr );
+	int hitIdx = 0;
+	if( tr.ent > 0 )
+	{
+		physent_t *pe = gEngfuncs.pEventAPI->EV_GetPhysent( tr.ent );
+		if( pe )
+			hitIdx = pe->info; // entity index of the hit physent
+	}
+	gEngfuncs.pEventAPI->EV_PopPMStates();
+
+	if( hitIdx < 1 || hitIdx > MAX_PLAYERS || hitIdx == gHUD.m_Scoreboard.m_iPlayerNum )
+		return false;
+	if( g_PlayerExtraInfo[hitIdx].dead )
+		return false;
+
+	static cvar_t *ffa = NULL;
+	if( !ffa ) ffa = gEngfuncs.pfnGetCvarPointer( "mp_freeforall" );
+	bool everyoneEnemy = ffa && ffa->value != 0.0f;
+	if( !everyoneEnemy && g_iTeamNumber != 0 && g_PlayerExtraInfo[hitIdx].teamnumber == g_iTeamNumber )
+		return false; // teammate
+
+	return true;
+}
+
 void CHudAmmo::DrawCrosshair()
 {
 	int flags, iDeltaDistance, iDistance, iLength, weaponid;
@@ -1652,10 +1715,22 @@ void CHudAmmo::DrawCrosshair()
 		int cy = ScreenHeight / 2;
 		int rs = XRES( 6 );  // reticle half-size
 
+		// MP3 hit feedback: a brief kill-confirm X right after downing an enemy; otherwise
+		// the dot, tinted red while the aim rests on a live enemy.
+		bool killFlash = m_iMp3CrossKill && gHUD.m_flTime < m_flKillConfirmUntil;
+		int tex = killFlash ? m_iMp3CrossKill : m_iMp3CrossDot;
+		int r = 255, g = 255, b = 255;
+		if( killFlash )
+			rs = XRES( 7 );           // the X reads slightly larger than the dot
+		else if( Mp3CrossOnEnemy() )
+		{
+			r = MP3_RED_R; g = MP3_RED_G; b = MP3_RED_B;
+		}
+
 		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
 		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
-		gEngfuncs.pTriAPI->Color4ub( 255, 255, 255, 235 );
-		gRenderAPI.GL_Bind( 0, m_iMp3CrossDot );   // crosshairdot.png reticle, no extra center dot
+		gEngfuncs.pTriAPI->Color4ub( r, g, b, 235 );
+		gRenderAPI.GL_Bind( 0, tex );
 		DrawUtils::Draw2DQuad( cx - rs, cy - rs, cx + rs, cy + rs );
 		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
 		return;

@@ -280,7 +280,11 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 		    !rgDeathNoticeList[i].bNonPlayerKill &&
 		    !rgDeathNoticeList[i].bSuicide &&
 		    !rgDeathNoticeList[i].bTeamKill )
+		{
 			gHUD.m_Timer.NotifyTeamKillScored( !( killerIsMe || killerIsTeammate ), killer_name );
+			if( killerIsMe )
+				gHUD.m_Ammo.NotifyKillConfirm(); // crosshair flashes the MP3 kill X
+		}
 	}
 
 	// Play kill sound
