@@ -38,6 +38,7 @@ version.
 #include <string.h>
 #include "vgui_parser.h"
 #include "draw_util.h"
+#include "mp3textfont.h"
 
 int CHudMoney::Init( )
 {
@@ -79,6 +80,13 @@ int CHudMoney::Draw(float flTime)
 
 	int x = ScreenWidth - iDollarWidth * 7;
 	int y = MONEY_YPOS;
+
+	// MP3 HUD: the bottom-right rows belong to the health silhouette + ammo line; move the
+	// money just above that block so it never overlaps them (offsets mirror health.cpp).
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+	if( cl_hud_mp3->value )
+		y = ScreenHeight - YRES( 16 + 10 + 2 + 56 ) - m_hDollar.rect.Height() - YRES( 6 );
 
 	if( m_iBlinkAmt )
 	{
@@ -132,6 +140,16 @@ int CHudMoney::Draw(float flTime)
 
 	alphaBalance = 255 - interpolate * (255 - MIN_ALPHA);
 
+	// MP3 HUD: render the amount with the kill-feed font instead of the sprite digits
+	if( cl_hud_mp3->value && gMp3Text.Ready() )
+	{
+		char buf[16];
+		snprintf( buf, sizeof( buf ), "$%d", m_iMoneyCount );
+		int H = YRES( 11 ) / 2; // same cap height as the kill feed text
+		int tw = gMp3Text.StringWidth( buf, H );
+		gMp3Text.DrawStringOutlined( ScreenWidth - XRES( 16 ) - tw, y + H, H, buf, r, g, b, alphaBalance );
+		return 1;
+	}
 
 	DrawUtils::ScaleColors( r, g, b, alphaBalance );
 

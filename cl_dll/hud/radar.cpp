@@ -675,6 +675,18 @@ bool CHudRadar::DrawMiniMap()
 	float yaw = DEG2RAD( gHUD.m_vecAngles.y );
 	float cy = cos( yaw ), sy = sin( yaw );
 
+	// dark backing disc so the circle interior reads as the MP3 night-blueprint even where the
+	// overview tiles don't reach (scanline strips: the render API has no scissor/stencil mask)
+	{
+		int ccx = m_iRadarX + iMaxRadius;
+		int ccy = m_iRadarY + iMaxRadius;
+		for( int row = -iMaxRadius; row <= iMaxRadius; row++ )
+		{
+			int half = (int)sqrt( (float)( iMaxRadius * iMaxRadius - row * row ) );
+			FillRGBABlend( ccx - half, ccy + row, 2 * half, 1, 12, 14, 16, 210 );
+		}
+	}
+
 	// only draw tiles whose center falls within the radar circle (world radius = pixels * scale);
 	// keeps the map roughly circular and stops it spilling across the screen.
 	float cullRange = iMaxRadius * RadarScale() * 1.15f;
@@ -682,7 +694,7 @@ bool CHudRadar::DrawMiniMap()
 
 	gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
 	gEngfuncs.pTriAPI->CullFace( TRI_NONE );
-	gEngfuncs.pTriAPI->Color4f( 0.62f, 0.62f, 0.62f, 1.0f ); // gray walls
+	gEngfuncs.pTriAPI->Color4f( 0.30f, 0.32f, 0.35f, 1.0f ); // dark cool walls (MP3 night map)
 
 	float xs = ov.origin[0], ys = ov.origin[1];
 	float x, y, xStep, yStep;
@@ -782,13 +794,13 @@ void CHudRadar::DrawMiniMapFrame()
 		return;
 	}
 
-	const int seg = 64;
+	const int seg = 96; // denser so the white ring reads as a solid line (MP3 border)
 	for( int k = 0; k < seg; k++ )
 	{
 		float a = ( 2.0f * M_PI * k ) / seg;
 		int px = cx + (int)( iMaxRadius * cos( a ) );
 		int py = cy + (int)( iMaxRadius * sin( a ) );
-		FillRGBA( px - 1, py - 1, 3, 3, 20, 20, 20, 230 );
+		FillRGBABlend( px - 1, py - 1, 3, 3, 230, 230, 230, 240 );
 	}
 }
 

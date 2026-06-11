@@ -593,7 +593,9 @@ public:
 	int Draw(float flTime);
 	CHudMsgFunc(Battery);
 	CHudMsgFunc(ArmorType);
-	
+
+	int GetArmor( void ) const { return m_iBat; } // for the MP3 armor meter next to the silhouette
+
 private:
 	enum armortype_t {
 		Vest = 0,
@@ -816,6 +818,11 @@ public:
 	// [empty]
 	CHudMsgFunc(ShowTimer);
 
+	// Max Payne 3 kill banners next to the score panel: "KILL +N" then the killer's name.
+	// Your team's kills show on the left, the enemy's on the right; kills landed while a
+	// banner is visible stack its counter (+1, +2, ...).
+	void NotifyTeamKillScored( bool bEnemy, const char *szKiller );
+
 	int m_right;
 private:
 	int m_HUD_timer;
@@ -823,6 +830,9 @@ private:
 	float m_fStartTime;
 	bool m_bPanicColorChange;
 	float m_flPanicTime;
+	float m_flKillBannerUntil[2];	// [0]=friendly (left), [1]=enemy (right)
+	int m_iKillBannerCount[2];
+	char m_szKillBannerName[2][32];	// killer name shown in the second phase
 };
 //
 //-----------------------------------------------------

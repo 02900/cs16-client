@@ -263,6 +263,25 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 
 	rgDeathNoticeList[i].flDisplayTime = gHUD.m_flTime + hud_deathnotice_time->value;
 
+	// Max Payne 3 kill banners next to the score panel: friendly kills (you/teammates) on the
+	// left, enemy kills on the right; each shows "KILL +N" then the killer's name. (thisplayer
+	// can lag behind in bot games, so also match the killer index against the local player
+	// number directly.) In FFA everyone but you counts as the enemy side.
+	{
+		static cvar_t *ffa = NULL;
+		if( !ffa ) ffa = gEngfuncs.pfnGetCvarPointer( "mp_freeforall" );
+		bool isFFA = ffa && ffa->value != 0.0f;
+
+		bool killerIsMe = killer_this_player || killer == gHUD.m_Scoreboard.m_iPlayerNum;
+		bool killerIsTeammate = !isFFA && killer >= 1 && killer <= MAX_PLAYERS && g_iTeamNumber != 0 &&
+			g_PlayerExtraInfo[killer].teamnumber == g_iTeamNumber;
+		if( killer >= 1 && killer <= MAX_PLAYERS &&
+		    !rgDeathNoticeList[i].bNonPlayerKill &&
+		    !rgDeathNoticeList[i].bSuicide &&
+		    !rgDeathNoticeList[i].bTeamKill )
+			gHUD.m_Timer.NotifyTeamKillScored( !( killerIsMe || killerIsTeammate ), killer_name );
+	}
+
 	// Play kill sound
 	if ((killer_this_player || g_iUser2 == killer) &&
 		!rgDeathNoticeList[i].bNonPlayerKill &&

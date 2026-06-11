@@ -77,6 +77,13 @@ int CHudBattery::Draw( float flTime )
 	if (!(gHUD.m_iWeaponBits & (1<<(WEAPON_SUIT)) ))
 		return 1;
 
+	// MP3 HUD shows armor as the vertical meter next to the health silhouette
+	// (health.cpp DrawHealthBar); skip the classic HL suit icon there.
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+	if( cl_hud_mp3->value )
+		return 1;
+
 	int r, g, b, x, y, a;
 	wrect_t rc;
 

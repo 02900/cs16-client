@@ -53,8 +53,26 @@ int CHudTimer::Init()
 	HOOK_MESSAGE( gHUD.m_Timer, ShowTimer );
 	m_iFlags = 0;
 	m_bPanicColorChange = false;
+	m_flKillBannerUntil[0] = m_flKillBannerUntil[1] = 0.0f;
+	m_iKillBannerCount[0] = m_iKillBannerCount[1] = 0;
+	m_szKillBannerName[0][0] = m_szKillBannerName[1][0] = '\0';
 	gHUD.AddHudElem(this);
 	return 1;
+}
+
+// Called from the death notice on every player kill (Max Payne 3 banners). Friendly kills
+// (you/teammates) bannered left of the score panel, enemy kills on the right; kills while
+// the side's banner is up stack its counter, and the latest killer's name is kept for the
+// second display phase.
+void CHudTimer::NotifyTeamKillScored( bool bEnemy, const char *szKiller )
+{
+	int s = bEnemy ? 1 : 0;
+	if( gHUD.m_flTime < m_flKillBannerUntil[s] )
+		m_iKillBannerCount[s]++;
+	else
+		m_iKillBannerCount[s] = 1;
+	m_flKillBannerUntil[s] = gHUD.m_flTime + 2.5f;
+	snprintf( m_szKillBannerName[s], sizeof( m_szKillBannerName[s] ), "%s", szKiller ? szKiller : "" );
 }
 
 int CHudTimer::VidInit()
@@ -154,15 +172,56 @@ int CHudTimer::Draw( float fTime )
 
 		int lw = gMp3Font.NumberWidth( leftScore, H );
 		int lChipR = tx0 - padX - gapC;
-		Chip( lChipR - lw - 2 * padX, ty - padY, lw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
+		int lChipL = lChipR - lw - 2 * padX;
+		Chip( lChipL, ty - padY, lw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
 		gMp3Font.DrawNumber( lChipR - lw - padX, ty, H, leftScore, 255, 255, 255, 255 );
 
+		int panelR = tx0 + timerW + padX; // right edge of the panel (grows if the enemy chip draws)
 		if( hasRight )
 		{
 			int rw = gMp3Font.NumberWidth( rightScore, H );
 			int rChipL = tx0 + timerW + padX + gapC;
 			Chip( rChipL, ty - padY, rw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
 			gMp3Font.DrawNumber( rChipL + padX, ty, H, rightScore, 245, 70, 70, 255 );
+			panelR = rChipL + rw + 2 * padX;
+		}
+
+		// Max Payne 3 kill banners: ~1s of "KILL +N" (count chip) then the killer's name.
+		// Friendly kills left of the panel (white-on-black, then black-on-white); enemy kills
+		// right of it (red-on-black "+N KILL", then black-on-red).
+		for( int s = 0; s < 2 && gMp3Text.Ready(); s++ )
+		{
+			if( gHUD.m_flTime >= m_flKillBannerUntil[s] )
+				continue;
+
+			float shown = 2.5f - ( m_flKillBannerUntil[s] - gHUD.m_flTime ); // since the last (re)trigger
+			bool namePhase = shown > 1.0f && m_szKillBannerName[s][0];
+
+			char txt[40];
+			if( namePhase )
+				snprintf( txt, sizeof( txt ), "%s", m_szKillBannerName[s] );
+			else if( s == 0 )
+				snprintf( txt, sizeof( txt ), "KILL +%d", m_iKillBannerCount[s] );
+			else
+				snprintf( txt, sizeof( txt ), "+%d KILL", m_iKillBannerCount[s] );
+
+			int bgr, bgg, bgb, fr, fg, fb;
+			if( s == 0 )
+			{
+				if( namePhase ) { bgr = bgg = bgb = 235; fr = fg = fb = 25; }   // black on white
+				else            { bgr = bgg = bgb = 0;   fr = fg = fb = 255; }  // white on black
+			}
+			else
+			{
+				if( namePhase ) { bgr = 200; bgg = bgb = 35; fr = fg = fb = 15; }      // black on red
+				else            { bgr = bgg = bgb = 0; fr = 245; fg = fb = 70; }       // red on black
+			}
+
+			int tw = gMp3Text.StringWidthBig( txt, H );
+			int chipX = ( s == 0 ) ? lChipL - YRES( 4 ) - tw - 2 * padX
+			                       : panelR + YRES( 4 );
+			Chip( chipX, ty - padY, tw + 2 * padX, H + 2 * padY, bgr, bgg, bgb, 255 );
+			gMp3Text.DrawStringBig( chipX + padX, ty + H, H, txt, fr, fg, fb, 255 ); // baseline = chip bottom edge
 		}
 
 		return 1;

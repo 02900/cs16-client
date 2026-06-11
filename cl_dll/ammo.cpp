@@ -1104,7 +1104,7 @@ int CHudAmmo::Draw(float flTime)
 		int reserve = gWR.CountAmmo( pw->iAmmoType );
 
 		int H = YRES( 8 );          // same size for clip and reserve (bold HUD digit font)
-		int gap = XRES( 8 );
+		int gap = XRES( 14 );       // wide enough for the MP3 dash separator between the numbers
 		int clipW = gMp3Font.NumberWidth( clip, H );
 		int resW  = gMp3Font.NumberWidth( reserve, H );
 		int totalW = clipW + gap + resW;
@@ -1115,6 +1115,12 @@ int CHudAmmo::Draw(float flTime)
 		int yb = ScreenHeight - YRES( 16 ) - H;
 
 		gMp3Font.DrawNumberOutlined( xx, yb, H, clip, 245, 245, 245, 255 );    // current clip: white
+		// MP3 dash separator (the digit font has no '-': draw a small bar centered in the gap)
+		{
+			int dw = max( 2, XRES( 4 ) );
+			int dh = max( 1, YRES( 2 ) );
+			FillRGBABlend( xx + clipW + ( gap - dw ) / 2, yb + H / 2 - dh / 2, dw, dh, 150, 150, 150, 235 );
+		}
 		xx += clipW + gap;
 		gMp3Font.DrawNumberOutlined( xx, yb, H, reserve, 150, 150, 150, 235 ); // reserve: gray
 		return 1;

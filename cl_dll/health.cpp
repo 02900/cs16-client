@@ -292,9 +292,9 @@ void CHudHealth::DrawHealthBar( float flTime )
 
 		int Hs = YRES( 56 );                   // silhouette height (texture is 64x128 -> 1:2)
 		int Ws = Hs / 2;
-		int ammoH = YRES( 22 );                // reserve room for the ammo line below the health
+		int ammoH = YRES( 10 );                // room for the ammo line below (tight, MP3-like)
 		int sx = ScreenWidth  - XRES( 16 ) - Ws;
-		int sy = ScreenHeight - YRES( 16 ) - ammoH - YRES( 4 ) - Hs;
+		int sy = ScreenHeight - YRES( 16 ) - ammoH - YRES( 2 ) - Hs;
 		int splitY = sy + (int)( frac * Hs );  // above = remaining health, below = damage
 
 		gRenderAPI.GL_Bind( 0, m_iMp3Silhouette );
@@ -319,6 +319,18 @@ void CHudHealth::DrawHealthBar( float flTime )
 		gEngfuncs.pTriAPI->TexCoord2f( 0, 1 );    gEngfuncs.pTriAPI->Vertex3f( sx,      sy + Hs, 0 );
 		gEngfuncs.pTriAPI->End();
 		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+
+		// armor as the MP3 vertical meter right of the silhouette (fills bottom-up)
+		{
+			int armor = gHUD.m_Battery.GetArmor();
+			if( armor < 0 ) armor = 0; if( armor > 100 ) armor = 100;
+			int bx = sx + Ws + XRES( 3 );
+			int bw = XRES( 3 );
+			FillRGBABlend( bx, sy, bw, Hs, 30, 30, 30, 200 );           // track
+			int fh = (int)( Hs * ( armor / 100.0f ) );
+			if( fh > 0 )
+				FillRGBABlend( bx, sy + Hs - fh, bw, fh, 220, 220, 220, 235 ); // fill
+		}
 		return;
 	}
 
