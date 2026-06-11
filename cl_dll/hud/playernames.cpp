@@ -20,10 +20,18 @@ sight, so it doesn't reveal people through walls by default.
 #include "const.h"
 #include "playernames.h"
 #include "mp3textfont.h"
+#include "mp3palette.h"
 
 #define PN_HEAD_OFFSET   46.0f   // height above the entity origin for the name
 #define PN_CHEST_OFFSET  18.0f   // LOS trace target / distance reference
 #define PN_LOS_CLEAR     0.95f   // trace fraction that counts as "visible"
+#define PN_GHOST_TIME    0.5f    // how long the just-lost health chunk stays gray on the bar
+
+// Damage flash state per player: when a bar's health drops, the lost fraction is frozen in
+// gray for PN_GHOST_TIME and then snapped away (Max Payne 3 hit feedback).
+static int   s_iPrevHealth[MAX_PLAYERS + 1];
+static int   s_iGhostHealth[MAX_PLAYERS + 1];
+static float s_flGhostTime[MAX_PLAYERS + 1];
 
 int CHudPlayerNames::Init( void )
 {
@@ -71,8 +79,31 @@ int CHudPlayerNames::Draw( float flTime )
 
 	for( int i = 1; i <= gEngfuncs.GetMaxClients(); i++ )
 	{
-		if( i == meIdx || g_PlayerExtraInfo[i].dead )
+		if( i == meIdx )
 			continue;
+
+		// damage-flash bookkeeping runs for every live player (even when the label is culled)
+		// so a hit on a briefly-unseen player doesn't flash stale gray later
+		int hNow = g_PlayerExtraInfo[i].sb_health;
+		if( g_PlayerExtraInfo[i].dead || hNow <= 0 )
+		{
+			s_iPrevHealth[i] = s_iGhostHealth[i] = 0;
+			s_flGhostTime[i] = 0.0f;
+			continue;
+		}
+		if( hNow < s_iPrevHealth[i] )
+		{
+			// took damage: freeze the lost chunk; chained hits keep the older (higher) edge
+			bool active = s_iGhostHealth[i] > s_iPrevHealth[i] && flTime < s_flGhostTime[i] + PN_GHOST_TIME;
+			if( !active )
+				s_iGhostHealth[i] = s_iPrevHealth[i];
+			s_flGhostTime[i] = flTime;
+		}
+		else if( hNow > s_iPrevHealth[i] )
+		{
+			s_iGhostHealth[i] = 0; // healed/respawned: drop the ghost
+		}
+		s_iPrevHealth[i] = hNow;
 
 		cl_entity_t *e = gEngfuncs.GetEntityByIndex( i );
 		if( !e || !e->player || e->curstate.solid == SOLID_NOT )
@@ -113,9 +144,9 @@ int CHudPlayerNames::Draw( float flTime )
 			continue;
 
 		bool enemy = ffa || ( g_iTeamNumber != 0 && g_PlayerExtraInfo[i].teamnumber != g_iTeamNumber );
-		int r = enemy ? 220 : 90;
-		int g = enemy ? 60  : 210;
-		int b = enemy ? 60  : 90;
+		int r = enemy ? MP3_RED_R : 90;   // allies keep their green (not part of the chip palette)
+		int g = enemy ? MP3_RED_G : 210;
+		int b = enemy ? MP3_RED_B : 90;
 
 		// name in the Max Payne 3 text font (fallback to the CS HUD font)
 		int H = YRES( 9 ) / 2;   // over-head name cap height
@@ -144,6 +175,15 @@ int CHudPlayerNames::Draw( float flTime )
 			int by = nameBottom;
 			FillRGBABlend( bx - 1, by - 1, bw + 2, bh + 2, 0, 0, 0, 160 );
 			FillRGBABlend( bx, by, ( bw * h ) / 100, bh, r, g, b, 220 );
+
+			// hit feedback: the just-lost fraction stays GRAY for a moment, then snaps away
+			int gh = s_iGhostHealth[i] > 100 ? 100 : s_iGhostHealth[i];
+			if( gh > h && flTime < s_flGhostTime[i] + PN_GHOST_TIME )
+			{
+				int x0 = bx + ( bw * h ) / 100;
+				int x1 = bx + ( bw * gh ) / 100;
+				FillRGBABlend( x0, by, x1 - x0, bh, MP3_GRAY_LT, 230 );
+			}
 		}
 	}
 
