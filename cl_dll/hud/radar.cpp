@@ -716,54 +716,81 @@ bool CHudRadar::DrawMiniMap()
 	float cullRange = iMaxRadius * RadarScale() * 1.15f;
 	float cullRange2 = cullRange * cullRange;
 
-	// --- MP3 blueprint: light floors on alpha, generated from the BSP. Drawn as an NxN grid of
-	// sub-quads of one texture so the existing per-tile circle culling keeps working. ---
+	// --- MP3 blueprint: light floors on alpha, generated from the BSP. The radar circle in
+	// WORLD space is a circle around the player, so the blueprint rect is clipped against a
+	// 24-gon approximation of it (Sutherland-Hodgman) and drawn as one triangle fan -- nothing
+	// can spill past the ring. UVs are affine in world XY, so they come straight from the
+	// clipped vertices. ---
 	if( hasBlueprint )
 	{
-		const int N = 12;
+		const int SEG = 24;
+		const int MAXV = SEG + 8; // convex rect clipped by SEG half-planes
 		float minx = m_flBPBounds[0], miny = m_flBPBounds[1];
 		float maxx = m_flBPBounds[2], maxy = m_flBPBounds[3];
-		float stepX = ( maxx - minx ) / N;
-		float stepY = ( maxy - miny ) / N;
+		float pcx = gHUD.m_vecOrigin.x, pcy = gHUD.m_vecOrigin.y;
+		float rad = iMaxRadius * RadarScale() * 0.99f; // world radius shown by the circle
 
-		gRenderAPI.GL_Bind( 0, m_iBlueprintTex );
-		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
-		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
-		gEngfuncs.pTriAPI->Color4f( 1.0f, 1.0f, 1.0f, 0.95f ); // the texture IS the style
-
-		for( int ix = 0; ix < N; ix++ )
+		// start from the blueprint rect, clip against each circle edge's inner half-plane
+		float poly[MAXV][2] = { { minx, miny }, { maxx, miny }, { maxx, maxy }, { minx, maxy } };
+		int n = 4;
+		float tmp[MAXV][2];
+		for( int e = 0; e < SEG && n >= 3; e++ )
 		{
-			for( int iy = 0; iy < N; iy++ )
+			float a0 = ( 2.0f * M_PI * e ) / SEG;
+			float a1 = ( 2.0f * M_PI * ( e + 1 ) ) / SEG;
+			float ex0 = pcx + rad * cos( a0 ), ey0 = pcy + rad * sin( a0 );
+			float ex1 = pcx + rad * cos( a1 ), ey1 = pcy + rad * sin( a1 );
+			// inside = left of the (counter-clockwise) edge
+			float dx = ex1 - ex0, dyv = ey1 - ey0;
+
+			int m = 0;
+			for( int i = 0; i < n; i++ )
 			{
-				float wx0 = minx + ix * stepX, wx1 = wx0 + stepX;
-				float wy0 = miny + iy * stepY, wy1 = wy0 + stepY;
-				float ddx = ( wx0 + wx1 ) * 0.5f - gHUD.m_vecOrigin.x;
-				float ddy = ( wy0 + wy1 ) * 0.5f - gHUD.m_vecOrigin.y;
-				if( ddx * ddx + ddy * ddy > cullRange2 )
-					continue;
-
-				float u0 = (float)ix / N, u1 = (float)( ix + 1 ) / N;
-				// PNG row 0 = world maxy (north up) -> v = (maxy - wy) / (maxy - miny)
-				float v0 = ( maxy - wy0 ) / ( maxy - miny );
-				float v1 = ( maxy - wy1 ) / ( maxy - miny );
-
-				float px0, py0, px1, py1, px2, py2, px3, py3;
-				WorldToMini( wx0, wy0, cy, sy, px0, py0 );
-				WorldToMini( wx1, wy0, cy, sy, px1, py1 );
-				WorldToMini( wx1, wy1, cy, sy, px2, py2 );
-				WorldToMini( wx0, wy1, cy, sy, px3, py3 );
-
-				gEngfuncs.pTriAPI->Begin( TRI_QUADS );
-				gEngfuncs.pTriAPI->TexCoord2f( u0, v0 ); gEngfuncs.pTriAPI->Vertex3f( px0, py0, 0 );
-				gEngfuncs.pTriAPI->TexCoord2f( u1, v0 ); gEngfuncs.pTriAPI->Vertex3f( px1, py1, 0 );
-				gEngfuncs.pTriAPI->TexCoord2f( u1, v1 ); gEngfuncs.pTriAPI->Vertex3f( px2, py2, 0 );
-				gEngfuncs.pTriAPI->TexCoord2f( u0, v1 ); gEngfuncs.pTriAPI->Vertex3f( px3, py3, 0 );
-				gEngfuncs.pTriAPI->End();
+				float *cur = poly[i];
+				float *nxt = poly[( i + 1 ) % n];
+				// cross > 0 = left of the CCW edge = inside the circle polygon
+				float dc = dx * ( cur[1] - ey0 ) - dyv * ( cur[0] - ex0 );
+				float dn = dx * ( nxt[1] - ey0 ) - dyv * ( nxt[0] - ex0 );
+				if( dc >= 0.0f ) // current inside
+				{
+					tmp[m][0] = cur[0]; tmp[m][1] = cur[1]; m++;
+				}
+				if( ( dc >= 0.0f ) != ( dn >= 0.0f ) && m < MAXV ) // edge crosses the plane
+				{
+					float t2 = dc / ( dc - dn );
+					tmp[m][0] = cur[0] + t2 * ( nxt[0] - cur[0] );
+					tmp[m][1] = cur[1] + t2 * ( nxt[1] - cur[1] );
+					m++;
+				}
+				if( m >= MAXV ) break;
 			}
+			n = m;
+			memcpy( poly, tmp, sizeof( float ) * 2 * n );
 		}
 
-		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
-		gEngfuncs.pTriAPI->Color4f( 1, 1, 1, 1 );
+		if( n >= 3 )
+		{
+			gRenderAPI.GL_Bind( 0, m_iBlueprintTex );
+			gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+			gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+			gEngfuncs.pTriAPI->Color4f( 1.0f, 1.0f, 1.0f, 0.95f ); // the texture IS the style
+
+			gEngfuncs.pTriAPI->Begin( TRI_TRIANGLE_FAN );
+			for( int i = 0; i < n; i++ )
+			{
+				float u = ( poly[i][0] - minx ) / ( maxx - minx );
+				// PNG row 0 = world maxy (north up) -> v = (maxy - wy) / (maxy - miny)
+				float v = ( maxy - poly[i][1] ) / ( maxy - miny );
+				float px, py;
+				WorldToMini( poly[i][0], poly[i][1], cy, sy, px, py );
+				gEngfuncs.pTriAPI->TexCoord2f( u, v );
+				gEngfuncs.pTriAPI->Vertex3f( px, py, 0 );
+			}
+			gEngfuncs.pTriAPI->End();
+
+			gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+			gEngfuncs.pTriAPI->Color4f( 1, 1, 1, 1 );
+		}
 		return true;
 	}
 
