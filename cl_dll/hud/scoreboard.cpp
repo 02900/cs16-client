@@ -239,14 +239,20 @@ static void SB_DrawPanel( int px, int py, int panelW, const char *title,
 	int colW   = XRES( 20 );                 // tight stat columns like MP3
 	int iconS  = YRES( 9 );
 	int nameX  = px + XRES( 14 );            // room for the mic icon at the left edge
-	int nameW  = panelW - XRES( 14 ) - 3 * colW - XRES( 6 );
+	int nameW  = panelW - XRES( 14 ) - 4 * colW - XRES( 6 );
 
-	// header: team name left, stat icons over their columns
+	// header: team name left; kill/death/assist icons + a small PING label over their columns
 	gMp3Text.DrawStringBig( px, py + headH - YRES( 3 ), YRES( 10 ), title, st.r, st.g, st.b, 255 );
 	for( int c = 0; c < 3; c++ )
 	{
-		int cx = px + panelW - ( 3 - c ) * colW + colW / 2;
+		int cx = px + panelW - ( 4 - c ) * colW + colW / 2;
 		SB_Icon( st.icons[c], cx - iconS / 2, py + ( headH - iconS ) / 2, iconS, MP3_WHITE, 235 );
+	}
+	{
+		int ph = YRES( 5 );
+		int pcx = px + panelW - colW / 2;
+		gMp3Text.DrawString( pcx - gMp3Text.StringWidth( "PING", ph ) / 2,
+			py + ( headH + ph ) / 2, ph, "PING", MP3_GRAY_DK, 235 );
 	}
 
 	int y = py + headH + YRES( 2 );
@@ -275,11 +281,12 @@ static void SB_DrawPanel( int px, int py, int panelW, const char *title,
 		SB_FitName( g_PlayerInfoList[i].name, name, sizeof( name ), textH, nameW );
 		gMp3Text.DrawStringOutlined( nameX, base, textH, name, nr, ng, nb, 255 );
 
-		int vals[3] = { g_PlayerExtraInfo[i].frags, g_PlayerExtraInfo[i].deaths, g_PlayerInfoList[i].ping };
-		for( int c = 0; c < 3; c++ )
+		int vals[4] = { g_PlayerExtraInfo[i].frags, g_PlayerExtraInfo[i].deaths,
+		                g_PlayerExtraInfo[i].assists, g_PlayerInfoList[i].ping };
+		for( int c = 0; c < 4; c++ )
 		{
 			int v = vals[c] < 0 ? 0 : vals[c];
-			int cx = px + panelW - ( 3 - c ) * colW + colW / 2;
+			int cx = px + panelW - ( 4 - c ) * colW + colW / 2;
 			int w = gMp3Font.NumberWidth( v, textH );
 			gMp3Font.DrawNumber( cx - w / 2, y + ( rowH - textH ) / 2, textH, v, nr, ng, nb, 255 );
 		}
@@ -333,7 +340,7 @@ int CHudScoreboard :: DrawScoreboardMP3( void )
 	}
 
 	// layout: compact table, centered on the screen (matches the MP3 reference)
-	int panelW = XRES( 190 );
+	int panelW = XRES( 210 );    // fits 4 stat columns (kills/deaths/assists/ping)
 	int gapW   = XRES( 16 );
 	int rowH   = YRES( 13 );
 	int headH  = YRES( 16 );
@@ -804,6 +811,7 @@ int CHudScoreboard :: MsgFunc_ScoreInfo( const char *pszName, int iSize, void *p
 		g_PlayerExtraInfo[cl].frags = frags;
 		g_PlayerExtraInfo[cl].deaths = deaths;
 		g_PlayerExtraInfo[cl].playerclass = playerclass;
+		g_PlayerExtraInfo[cl].assists = playerclass; // our server reuses the reserved short for assists
 		g_PlayerExtraInfo[cl].teamnumber = teamnumber;
 
 		//gViewPort->UpdateOnPlayerInfo();

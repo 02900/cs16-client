@@ -449,10 +449,11 @@ protected:
 	cvar_t *hud_centerid;
 };
 
-struct extra_player_info_t 
+struct extra_player_info_t
 {
 	short frags;
 	short deaths;
+	short assists;	// kill assists (ScoreInfo's reserved short; 0 on vanilla servers)
 	short team_id;
 	qboolean has_c4;
 	qboolean vip;
