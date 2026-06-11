@@ -24,6 +24,7 @@
 #include "draw_util.h"
 #include "strl.h"
 #include "mp3textfont.h"
+#include "mp3palette.h"
 
 float color[3];
 
@@ -113,9 +114,9 @@ int CHudDeathNotice :: Draw( float flTime )
 			if ( rgDeathNoticeList[i].iHeadShotId )
 				strlcat( weap, " (HS)", sizeof( weap ) );
 
-			int wr = rgDeathNoticeList[i].bTeamKill ? 30  : 170;
-			int wg = rgDeathNoticeList[i].bTeamKill ? 230 : 170;
-			int wb = rgDeathNoticeList[i].bTeamKill ? 30  : 170;
+			int wr = rgDeathNoticeList[i].bTeamKill ? 30  : MP3_GRAY_DK_R;
+			int wg = rgDeathNoticeList[i].bTeamKill ? 230 : MP3_GRAY_DK_G;
+			int wb = rgDeathNoticeList[i].bTeamKill ? 30  : MP3_GRAY_DK_B;
 			x = XRES( 8 );
 
 			if ( gMp3Text.Ready() )
@@ -128,12 +129,12 @@ int CHudDeathNotice :: Draw( float flTime )
 				int base1 = base2 - lineH;             // killer baseline
 
 				if ( !rgDeathNoticeList[i].bSuicide )
-					gMp3Text.DrawStringOutlined( x, base1, H, rgDeathNoticeList[i].szKiller, 255, 255, 255, 255 );
+					gMp3Text.DrawStringOutlined( x, base1, H, rgDeathNoticeList[i].szKiller, MP3_WHITE, 255 );
 
 				int vx = gMp3Text.DrawStringOutlined( x, base2, H, weap, wr, wg, wb, 255 );
 				vx += XRES( 6 );
 				if ( !rgDeathNoticeList[i].bNonPlayerKill )
-					gMp3Text.DrawStringOutlined( vx, base2, H, rgDeathNoticeList[i].szVictim, 235, 60, 60, 255 );
+					gMp3Text.DrawStringOutlined( vx, base2, H, rgDeathNoticeList[i].szVictim, MP3_RED, 255 );
 			}
 			else
 			{

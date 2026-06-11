@@ -35,6 +35,7 @@
 #include "triangleapi.h"
 #include "weapontype.h"
 #include "mp3font.h"
+#include "mp3palette.h"
 #include "mp3textfont.h"
 #include "camera.h"
 
@@ -1114,15 +1115,15 @@ int CHudAmmo::Draw(float flTime)
 		int xx = rightEdge - totalW;
 		int yb = ScreenHeight - YRES( 16 ) - H;
 
-		gMp3Font.DrawNumberOutlined( xx, yb, H, clip, 245, 245, 245, 255 );    // current clip: white
+		gMp3Font.DrawNumberOutlined( xx, yb, H, clip, MP3_WHITE, 255 );        // current clip: white
 		// MP3 dash separator (the digit font has no '-': draw a small bar centered in the gap)
 		{
 			int dw = max( 2, XRES( 4 ) );
 			int dh = max( 1, YRES( 2 ) );
-			FillRGBABlend( xx + clipW + ( gap - dw ) / 2, yb + H / 2 - dh / 2, dw, dh, 150, 150, 150, 235 );
+			FillRGBABlend( xx + clipW + ( gap - dw ) / 2, yb + H / 2 - dh / 2, dw, dh, MP3_GRAY_DK, 235 );
 		}
 		xx += clipW + gap;
-		gMp3Font.DrawNumberOutlined( xx, yb, H, reserve, 150, 150, 150, 235 ); // reserve: gray
+		gMp3Font.DrawNumberOutlined( xx, yb, H, reserve, MP3_GRAY_DK, 235 );   // reserve: gray
 		return 1;
 	}
 

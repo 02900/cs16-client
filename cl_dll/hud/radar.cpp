@@ -31,6 +31,7 @@ version.
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "draw_util.h"
+#include "mp3palette.h"
 #include "triangleapi.h"
 #include "vgui_parser.h"
 #include "hud_spectator.h"
@@ -800,7 +801,7 @@ void CHudRadar::DrawMiniMapFrame()
 		float a = ( 2.0f * M_PI * k ) / seg;
 		int px = cx + (int)( iMaxRadius * cos( a ) );
 		int py = cy + (int)( iMaxRadius * sin( a ) );
-		FillRGBABlend( px - 1, py - 1, 3, 3, 230, 230, 230, 240 );
+		FillRGBABlend( px - 1, py - 1, 3, 3, MP3_WHITE, 240 );
 	}
 }
 

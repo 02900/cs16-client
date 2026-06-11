@@ -31,6 +31,7 @@
 
 #include "draw_util.h"
 #include "triangleapi.h"
+#include "mp3palette.h"
 
 #include "ev_hldm.h"
 #include "com_weapons.h"
@@ -302,7 +303,7 @@ void CHudHealth::DrawHealthBar( float flTime )
 		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
 
 		// remaining health on top (neutral gray)
-		gEngfuncs.pTriAPI->Color4ub( 150, 150, 150, 225 );
+		gEngfuncs.pTriAPI->Color4ub( MP3_GRAY_DK, 225 );
 		gEngfuncs.pTriAPI->Begin( TRI_QUADS );
 		gEngfuncs.pTriAPI->TexCoord2f( 0, 0 );    gEngfuncs.pTriAPI->Vertex3f( sx,      sy,     0 );
 		gEngfuncs.pTriAPI->TexCoord2f( 1, 0 );    gEngfuncs.pTriAPI->Vertex3f( sx + Ws, sy,     0 );
@@ -326,10 +327,10 @@ void CHudHealth::DrawHealthBar( float flTime )
 			if( armor < 0 ) armor = 0; if( armor > 100 ) armor = 100;
 			int bx = sx + Ws + XRES( 3 );
 			int bw = XRES( 3 );
-			FillRGBABlend( bx, sy, bw, Hs, 30, 30, 30, 200 );           // track
+			FillRGBABlend( bx, sy, bw, Hs, MP3_BLACK, 200 );            // track
 			int fh = (int)( Hs * ( armor / 100.0f ) );
 			if( fh > 0 )
-				FillRGBABlend( bx, sy + Hs - fh, bw, fh, 220, 220, 220, 235 ); // fill
+				FillRGBABlend( bx, sy + Hs - fh, bw, fh, MP3_GRAY_LT, 235 ); // fill
 		}
 		return;
 	}

@@ -38,6 +38,7 @@ version.
 #include "draw_util.h"
 #include "mp3font.h"
 #include "mp3textfont.h"
+#include "mp3palette.h"
 
 // Max Payne 3 style chip behind a HUD number cluster (score chips solid black, timer light gray).
 // NOTE: FillRGBA is additive in this engine (black draws nothing) -> use FillRGBABlend so an
@@ -118,7 +119,7 @@ int CHudTimer::Draw( float fTime )
 	if( gMp3Font.Ready() && cl_hud_mp3->value )
 	{
 		int H    = YRES( 20 );
-		int colW = H / 6;
+		int colW = H / 4;           // colon column, wide enough for stroke-sized dots
 		int padX = H / 4, padY = H / 6;
 		int gapC = 0;               // chips sit flush against each other (Max Payne 3)
 		int gd   = max( 1, H / 12 ); // inter-digit gap
@@ -133,16 +134,16 @@ int CHudTimer::Draw( float fTime )
 
 		// timer chip is LIGHT GRAY with dark digits (Max Payne 3); digits turn red when time is low
 		bool panic = ( minutes * 60 + seconds ) <= 20;
-		int tcr = panic ? 210 : 35;
-		int tcg = panic ? 40  : 35;
-		int tcb = panic ? 40  : 35;
-		Chip( tx0 - padX, ty - padY, timerW + 2 * padX, H + 2 * padY, 205, 205, 205, 255 );
+		int tcr = panic ? MP3_RED_R : MP3_BLACK_R;
+		int tcg = panic ? MP3_RED_G : MP3_BLACK_G;
+		int tcb = panic ? MP3_RED_B : MP3_BLACK_B;
+		Chip( tx0 - padX, ty - padY, timerW + 2 * padX, H + 2 * padY, MP3_GRAY_LT, 255 );
 		int tx = tx0;
 		gMp3Font.DrawNumber( tx, ty, H, minutes, tcr, tcg, tcb, 255 );
 		tx += minW;
-		int ds = max( 2, H / 12 );
-		FillRGBABlend( tx + colW / 2 - ds / 2, ty + (int)( H * 0.34f ), ds, ds, tcr, tcg, tcb, 255 );
-		FillRGBABlend( tx + colW / 2 - ds / 2, ty + (int)( H * 0.60f ), ds, ds, tcr, tcg, tcb, 255 );
+		int ds = max( 3, H / 5 ); // colon dots ~ digit stroke width (proportional to the numbers)
+		FillRGBABlend( tx + colW / 2 - ds / 2, ty + (int)( H * 0.30f ) - ds / 2, ds, ds, tcr, tcg, tcb, 255 );
+		FillRGBABlend( tx + colW / 2 - ds / 2, ty + (int)( H * 0.70f ) - ds / 2, ds, ds, tcr, tcg, tcb, 255 );
 		tx += colW;
 		gMp3Font.DrawDigit( tx, ty, H, s10, tcr, tcg, tcb, 255 );
 		tx += gMp3Font.DigitWidth( s10, H ) + gd;
@@ -173,16 +174,16 @@ int CHudTimer::Draw( float fTime )
 		int lw = gMp3Font.NumberWidth( leftScore, H );
 		int lChipR = tx0 - padX - gapC;
 		int lChipL = lChipR - lw - 2 * padX;
-		Chip( lChipL, ty - padY, lw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
-		gMp3Font.DrawNumber( lChipR - lw - padX, ty, H, leftScore, 255, 255, 255, 255 );
+		Chip( lChipL, ty - padY, lw + 2 * padX, H + 2 * padY, MP3_BLACK, 255 );
+		gMp3Font.DrawNumber( lChipR - lw - padX, ty, H, leftScore, MP3_WHITE, 255 );
 
 		int panelR = tx0 + timerW + padX; // right edge of the panel (grows if the enemy chip draws)
 		if( hasRight )
 		{
 			int rw = gMp3Font.NumberWidth( rightScore, H );
 			int rChipL = tx0 + timerW + padX + gapC;
-			Chip( rChipL, ty - padY, rw + 2 * padX, H + 2 * padY, 0, 0, 0, 255 );
-			gMp3Font.DrawNumber( rChipL + padX, ty, H, rightScore, 245, 70, 70, 255 );
+			Chip( rChipL, ty - padY, rw + 2 * padX, H + 2 * padY, MP3_BLACK, 255 );
+			gMp3Font.DrawNumber( rChipL + padX, ty, H, rightScore, MP3_RED, 255 );
 			panelR = rChipL + rw + 2 * padX;
 		}
 
@@ -208,13 +209,17 @@ int CHudTimer::Draw( float fTime )
 			int bgr, bgg, bgb, fr, fg, fb;
 			if( s == 0 )
 			{
-				if( namePhase ) { bgr = bgg = bgb = 235; fr = fg = fb = 25; }   // black on white
-				else            { bgr = bgg = bgb = 0;   fr = fg = fb = 255; }  // white on black
+				if( namePhase ) { bgr = MP3_WHITE_R; bgg = MP3_WHITE_G; bgb = MP3_WHITE_B;
+				                  fr  = MP3_BLACK_R; fg  = MP3_BLACK_G; fb  = MP3_BLACK_B; } // black on white
+				else            { bgr = MP3_BLACK_R; bgg = MP3_BLACK_G; bgb = MP3_BLACK_B;
+				                  fr  = MP3_WHITE_R; fg  = MP3_WHITE_G; fb  = MP3_WHITE_B; } // white on black
 			}
 			else
 			{
-				if( namePhase ) { bgr = 200; bgg = bgb = 35; fr = fg = fb = 15; }      // black on red
-				else            { bgr = bgg = bgb = 0; fr = 245; fg = fb = 70; }       // red on black
+				if( namePhase ) { bgr = MP3_RED_R;   bgg = MP3_RED_G;   bgb = MP3_RED_B;
+				                  fr  = MP3_BLACK_R; fg  = MP3_BLACK_G; fb  = MP3_BLACK_B; } // black on red
+				else            { bgr = MP3_BLACK_R; bgg = MP3_BLACK_G; bgb = MP3_BLACK_B;
+				                  fr  = MP3_RED_R;   fg  = MP3_RED_G;   fb  = MP3_RED_B;   } // red on black
 			}
 
 			int tw = gMp3Text.StringWidthBig( txt, H );
