@@ -1845,6 +1845,12 @@ void V_CalcThirdPersonRefdef( ref_params_t *pparams )
 		Vector look = aimPoint - Vector( pparams->vieworg );
 		VectorAngles( look, pparams->viewangles );
 		pparams->viewangles[PITCH] = -pparams->viewangles[PITCH]; // VectorAngles -> engine pitch
+
+		// Visual recoil: kick the render view exactly like first person does. The aim ray
+		// above stays punch-free (that was the decal fix), so the reticle rides up with the
+		// kick and settles back onto the impact point as the punch decays.
+		pparams->viewangles = pparams->viewangles + pparams->punchangle + ev_punchangle;
+		V_DropPunchAngle( pparams->frametime, (float *)&ev_punchangle );
 	}
 	else
 	{
