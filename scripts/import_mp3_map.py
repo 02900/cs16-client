@@ -74,8 +74,12 @@ def export_one(tool_entry, mp3_dir, work, m, force):
         print("  cached  %s (use --force to re-export)" % name)
         return outdir
 
-    args = [sys.executable, tool_entry, "cs16-export", archive, m["entry"],
+    args = [sys.executable, tool_entry, "cs16-export", archive,
             "-o", outdir, "--name", name]
+    if m.get("entry"):                  # unused in --visual mode
+        args.insert(4, m["entry"])
+    if m.get("visual"):
+        args.append("--visual")
     for key, flag in (("scale", "--scale"), ("thickness", "--thickness"),
                       ("spawns", "--spawns"), ("crop", "--crop"),
                       ("max_tris", "--max-tris"), ("tex_scale", "--tex-scale"),
@@ -182,7 +186,8 @@ def main():
     done = compiled = 0
     for m in maps:
         name = m["name"]
-        print("[map] %s  (%s :: %s)" % (name, m["archive"], m["entry"]))
+        print("[map] %s  (%s :: %s)" % (name, m["archive"],
+                                        m.get("entry") or "visual .wdr"))
         outdir = export_one(tool_entry, args.mp3, args.work, m, args.force)
         if not outdir:
             continue
