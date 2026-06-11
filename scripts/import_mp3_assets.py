@@ -23,8 +23,11 @@ Usage:
     python scripts/import_mp3_assets.py --rpf "<path to pc.rpf>" --gamedir "<...>/cstrike"
 
 Optional per-asset transforms in the manifest (require Pillow):
-    "resize": [w, h]      resample to w x h
-    "tint":   [r, g, b]   multiply RGB (0-255) -- e.g. recolor a white glyph
+    "resize": [w, h]          resample to w x h
+    "tint":   [r, g, b]       multiply RGB (0-255) -- e.g. recolor a white glyph
+    "crop":   [x0, y0, x1, y1] crop to the box before other transforms
+    "alpha_from_dark": true   re-key dark-ink-on-white art to white-on-alpha
+                              (alpha = inverted luminance; RGB forced to white)
 """
 import argparse
 import json
@@ -119,13 +122,22 @@ def main():
             continue
 
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        ops = [k for k in ("resize", "tint") if k in a]
+        ops = [k for k in ("resize", "tint", "crop", "alpha_from_dark") if k in a]
         if ops and not have_pil:
             print("  [warn] %s needs Pillow for %s; copying as-is" % (a["src"], ops))
             ops = []
 
         if ops:
             img = Image.open(src_png).convert("RGBA")
+            if "crop" in a:
+                img = img.crop(tuple(a["crop"]))
+            if "alpha_from_dark" in a and a["alpha_from_dark"]:
+                px = img.load()
+                for y in range(img.height):
+                    for x in range(img.width):
+                        r, g, b, al = px[x, y]
+                        lum = (r * 299 + g * 587 + b * 114) // 1000
+                        px[x, y] = (255, 255, 255, (255 - lum) * al // 255)
             if "resize" in a:
                 img = img.resize(tuple(a["resize"]), Image.LANCZOS)
             if "tint" in a:

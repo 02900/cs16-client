@@ -18,8 +18,15 @@ public:
 	// same as DrawString but with a dark outline behind it for readability
 	int  DrawStringOutlined( int x, int baselineY, int H, const char *s, int r, int g, int b, int a );
 
+	// high-res variant for LARGE text (banners): ~45px glyphs so upscaling doesn't pixelate.
+	// Caps + digits only (lowercase maps to uppercase); falls back to the small font when
+	// gfx/mp3/font_big.png is missing.
+	int  StringWidthBig( const char *s, int H ) const;
+	int  DrawStringBig( int x, int baselineY, int H, const char *s, int r, int g, int b, int a );
+
 private:
 	int m_iTex;
+	int m_iTexBig;
 };
 
 extern CMp3TextFont gMp3Text;
