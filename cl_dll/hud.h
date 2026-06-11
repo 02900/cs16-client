@@ -529,9 +529,20 @@ public:
 	CHudMsgFunc(DeathMsg);
 
 private:
+	bool DrawDeathScreen( void ); // MP3 "KILLED BY" panel + CRT filter while dead; true if shown
+
 	int m_HUD_d_skull;  // sprite index of skull icon
 	int m_HUD_d_headshot;
 	cvar_t *hud_deathnotice_time;
+
+	// Max Payne 3 death screen: who killed me last (captured from DeathMsg)
+	char m_szMyKillerName[32];
+	char m_szMyKillerWeapon[40];
+	int  m_iMyKillerSprite;       // d_* weapon sprite index (0 = none)
+	bool m_bMySuicide;
+	int  m_iMyLastKillerIdx;      // for the "KILLED AGAIN BY" counter
+	int  m_iKilledAgainCount;
+	float m_flMyDeathTime;        // hud time of my last death (drives the respawn countdown)
 };
 
 //

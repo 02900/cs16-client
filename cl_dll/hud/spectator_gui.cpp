@@ -174,6 +174,13 @@ int CHudSpectatorGui::Draw( float flTime )
 		return 1;
 	}
 
+	// MP3 HUD: the death screen (death.cpp) draws its own clean letterbox; skip the classic
+	// spectator bars and the map/score/time info they carry.
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+	if( cl_hud_mp3->value )
+		return 1;
+
 	// function name says it
 	CalcAllNeededData( );
 

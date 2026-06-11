@@ -25,6 +25,7 @@
 #include "strl.h"
 #include "mp3textfont.h"
 #include "mp3palette.h"
+#include "mp3postfx.h"
 
 float color[3];
 
@@ -44,6 +45,12 @@ struct DeathNoticeItem {
 
 #define MAX_DEATHNOTICES	4
 static int DEATHNOTICE_DISPLAY_TIME = 6;
+
+// Max Payne 3 respawn flow -- MUST match the MP3_RESPAWN_* constants in the ReGameDLL fork
+// (regamedll/dlls/game.h): the death screen shows a countdown until the respawn button
+// unlocks, and the server forces the respawn at the deadline.
+#define MP3_RESPAWN_MIN_WAIT	3.0f	// seconds after death before the respawn button works
+#define MP3_RESPAWN_MAX_WAIT	6.0f	// seconds after death when the server forces respawn
 
 #define DEATHNOTICE_TOP		32
 
@@ -70,6 +77,14 @@ int CHudDeathNotice :: Init( void )
 void CHudDeathNotice :: InitHUDData( void )
 {
 	memset( rgDeathNoticeList, 0, sizeof(rgDeathNoticeList) );
+
+	m_szMyKillerName[0] = '\0';
+	m_szMyKillerWeapon[0] = '\0';
+	m_iMyKillerSprite = 0;
+	m_bMySuicide = false;
+	m_iMyLastKillerIdx = 0;
+	m_iKilledAgainCount = 0;
+	m_flMyDeathTime = 0.0f;
 }
 
 
@@ -81,9 +96,116 @@ int CHudDeathNotice :: VidInit( void )
 	return 1;
 }
 
+// Max Payne 3 death screen: CRT scanline wash over the scene, clean letterbox bands, plus the
+// left-side stack (red "KILLED BY" chip, killer name, weapon icon + name) while the local
+// player is dead. Returns true when shown (the kill feed is hidden underneath it).
+bool CHudDeathNotice :: DrawDeathScreen( void )
+{
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+	if( !cl_hud_mp3->value || !gMp3Text.Ready() )
+		return false;
+	if( gHUD.m_Health.m_iHealth > 0 || m_iKilledAgainCount <= 0 )
+		return false; // alive, or no recorded death yet
+
+	// True grayscale via the GL post-process when available (the chips drawn after this keep
+	// their color, like MP3 where the red KILLED BY chip is the only saturated thing on
+	// screen); otherwise approximate with a gray wash. Scanlines go on top either way.
+	if( !Mp3PostFX_GrayscaleScreen() )
+		FillRGBABlend( 0, 0, ScreenWidth, ScreenHeight, 200, 200, 200, 28 );
+	for( int sl = 0; sl < ScreenHeight; sl += 3 )
+		FillRGBABlend( 0, sl, ScreenWidth, 1, 0, 0, 0, 110 );
+
+	// MP3 letterbox: clean opaque bands (the classic spectator bars + their info are
+	// suppressed in spectator_gui.cpp while the MP3 HUD is on)
+	int bandTop = YRES( 8 );
+	int bandBot = YRES( 20 );
+	FillRGBABlend( 0, 0, ScreenWidth, bandTop, 0, 0, 0, 255 );
+	FillRGBABlend( 0, ScreenHeight - bandBot, ScreenWidth, bandBot, 0, 0, 0, 255 );
+
+	int x = XRES( 24 );
+	int y = (int)( ScreenHeight * 0.55f );
+
+	// title: black text on the red chip (roomy padding like the reference)
+	const char *title = m_bMySuicide ? "YOU DIED"
+	                  : ( m_iKilledAgainCount >= 2 ? "KILLED AGAIN BY" : "KILLED BY" );
+	int H1 = YRES( 15 );
+	int p1x = H1, p1y = H1 / 3;
+	int tw = gMp3Text.StringWidthBig( title, H1 );
+	FillRGBABlend( x - p1x, y - p1y, tw + 2 * p1x, H1 + 2 * p1y, MP3_RED, 255 );
+	gMp3Text.DrawStringBig( x, y + H1, H1, title, MP3_BLACK, 255 );
+	y += H1 + 2 * p1y + YRES( 4 );
+
+	if( !m_bMySuicide && m_szMyKillerName[0] )
+	{
+		// killer name: red on black
+		int H2 = YRES( 10 );
+		int p2x = ( H2 * 2 ) / 3, p2y = H2 / 3;
+		tw = gMp3Text.StringWidthBig( m_szMyKillerName, H2 );
+		FillRGBABlend( x - p2x, y - p2y, tw + 2 * p2x, H2 + 2 * p2y, MP3_BLACK, 255 );
+		gMp3Text.DrawStringBig( x, y + H2, H2, m_szMyKillerName, MP3_RED, 255 );
+		y += H2 + 2 * p2y + YRES( 10 );
+
+		// weapon: gray d_* sprite + white name on a black chip
+		int H3 = YRES( 8 );
+		int p3x = H3;
+		int sprW = 0, sprH = 0;
+		if( m_iMyKillerSprite )
+		{
+			sprW = gHUD.GetSpriteRect( m_iMyKillerSprite ).Width();
+			sprH = gHUD.GetSpriteRect( m_iMyKillerSprite ).Height();
+		}
+		tw = gMp3Text.StringWidthBig( m_szMyKillerWeapon, H3 );
+		int chipH = max( H3 * 2 + YRES( 2 ), sprH + YRES( 6 ) );
+		int chipW = p3x + sprW + ( sprW ? XRES( 10 ) : 0 ) + tw + p3x;
+		FillRGBABlend( x - p3x, y, chipW, chipH, MP3_BLACK, 255 );
+		int cx = x;
+		if( m_iMyKillerSprite )
+		{
+			SPR_Set( gHUD.GetSprite( m_iMyKillerSprite ), 190, 190, 190 );
+			SPR_DrawAdditive( 0, cx, y + ( chipH - sprH ) / 2, &gHUD.GetSpriteRect( m_iMyKillerSprite ) );
+			cx += sprW + XRES( 10 );
+		}
+		gMp3Text.DrawStringBig( cx, y + ( chipH + H3 ) / 2, H3, m_szMyKillerWeapon, MP3_WHITE, 255 );
+	}
+
+	// prompts inside the bottom band, right-aligned (MP3 style). The respawn prompt counts
+	// down while the button is locked (server enforces the same window, see the ReGameDLL
+	// fork's MP3_RESPAWN_* constants) and switches to the button hint once it unlocks.
+	{
+		int Hh = YRES( 8 );
+		int hy = ScreenHeight - ( bandBot - Hh ) / 2; // baseline centered in the band
+		int hx = ScreenWidth - XRES( 16 );
+		int w2 = gMp3Text.StringWidthBig( "VIEW SCORES  TAB", Hh );
+		gMp3Text.DrawStringBig( hx - w2, hy, Hh, "VIEW SCORES  TAB", MP3_WHITE, 235 );
+		hx -= w2 + XRES( 24 );
+
+		float elapsed = gHUD.m_flTime - m_flMyDeathTime;
+		if( elapsed >= 0.0f && elapsed < MP3_RESPAWN_MIN_WAIT )
+		{
+			// locked: show the seconds left until the respawn button unlocks
+			int secsLeft = (int)( MP3_RESPAWN_MIN_WAIT - elapsed ) + 1;
+			char cnt[24];
+			snprintf( cnt, sizeof( cnt ), "RESPAWN %d", secsLeft );
+			int w1 = gMp3Text.StringWidthBig( cnt, Hh );
+			gMp3Text.DrawStringBig( hx - w1, hy, Hh, cnt, MP3_GRAY_DK, 235 );
+		}
+		else
+		{
+			int w1 = gMp3Text.StringWidthBig( "RESPAWN  FIRE", Hh );
+			gMp3Text.DrawStringBig( hx - w1, hy, Hh, "RESPAWN  FIRE", MP3_WHITE, 235 );
+		}
+	}
+
+	return true;
+}
+
 int CHudDeathNotice :: Draw( float flTime )
 {
 	int x, y, r, g, b, i;
+
+	if( DrawDeathScreen() )
+		return 1; // the death screen owns the view; the kill feed would clutter the panel
 
 	for( i = 0; i < MAX_DEATHNOTICES; i++ )
 	{
@@ -287,6 +409,24 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 		}
 	}
 
+	// Max Payne 3 death screen: remember who killed ME and with what (drawn while dead)
+	if( victim >= 1 && victim <= MAX_PLAYERS &&
+	    ( g_PlayerInfoList[victim].thisplayer || victim == gHUD.m_Scoreboard.m_iPlayerNum ) &&
+	    !rgDeathNoticeList[i].bNonPlayerKill )
+	{
+		m_bMySuicide = rgDeathNoticeList[i].bSuicide;
+		snprintf( m_szMyKillerName, sizeof( m_szMyKillerName ), "%s", killer_name ? killer_name : "" );
+		snprintf( m_szMyKillerWeapon, sizeof( m_szMyKillerWeapon ), "%s", rgDeathNoticeList[i].szWeapon );
+		m_iMyKillerSprite = rgDeathNoticeList[i].iId;
+		m_flMyDeathTime = gHUD.m_flTime;
+		// consecutive deaths to the same player -> "KILLED AGAIN BY"
+		if( !m_bMySuicide && killer == m_iMyLastKillerIdx )
+			m_iKilledAgainCount++;
+		else
+			m_iKilledAgainCount = 1;
+		m_iMyLastKillerIdx = m_bMySuicide ? 0 : killer;
+	}
+
 	// Play kill sound
 	if ((killer_this_player || g_iUser2 == killer) &&
 		!rgDeathNoticeList[i].bNonPlayerKill &&
@@ -295,6 +435,13 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 	{
 		PlaySound(cl_killsound_path->string, cl_killsound->value);
 	}
+
+	// MP3 HUD: skip the console death notices -- the engine echoes them as notify text in the
+	// top-left corner, and the MP3 kill feed already shows the same info.
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+	if( cl_hud_mp3->value )
+		return 1;
 
 	if (rgDeathNoticeList[i].bNonPlayerKill)
 	{
