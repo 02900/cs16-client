@@ -80,11 +80,14 @@ def export_one(tool_entry, mp3_dir, work, m, force):
                       ("spawns", "--spawns"), ("crop", "--crop"),
                       ("max_tris", "--max-tris"), ("tex_scale", "--tex-scale"),
                       ("tex_floor", "--tex-floor"), ("tex_wall", "--tex-wall"),
-                      ("tex_ceiling", "--tex-ceiling"), ("voxel", "--voxel")):
+                      ("tex_ceiling", "--tex-ceiling"), ("voxel", "--voxel"),
+                      ("light_scale", "--light-scale")):
         if m.get(key) is not None:
             # "--flag=value" so a negative --crop (leading '-') is not parsed
             # as another option by the tool's argparse.
             args.append("%s=%s" % (flag, m[key]))
+    if m.get("lights") is False:
+        args.append("--no-lights")
 
     tex = m.get("texture")
     if tex:
