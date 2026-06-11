@@ -25,6 +25,10 @@
     { "src": "ammo_smg",         "dest": "gfx/mp3/ammo_smg.png" },
     { "src": "ammo_shotgun",     "dest": "gfx/mp3/ammo_shotgun.png" },
     { "src": "ammo_sniper",      "dest": "gfx/mp3/ammo_sniper.png" },
+    { "src": "sb_kills",         "dest": "gfx/mp3/sb_kills.png" },
+    { "src": "sb_deaths",        "dest": "gfx/mp3/sb_deaths.png" },
+    { "src": "sb_assists",       "dest": "gfx/mp3/sb_assists.png" },
+    { "src": "mp_level_mic",     "dest": "gfx/mp3/sb_mic.png" },
     { "src": "allfontsintwo",    "dest": "gfx/mp3/font.png" },
     { "src": "allfontsinone",    "dest": "gfx/mp3/font_big.png",
       "_why": "same font family at ~46px cap height (1024 atlas, caps+digits+symbols) for big HUD text -- the 512 atlas only has ~21px glyphs, which pixelate when upscaled" }

@@ -376,6 +376,7 @@ public:
 	int Draw( float flTime );
 
 	int DrawScoreboard( float flTime );
+	int DrawScoreboardMP3( void ); // Max Payne 3 styled TAB scoreboard (returns 0 to fall back)
 	int DrawTeams( float listslot );
 	int DrawPlayers( float listslot, int nameoffset = 0, const char *team = NULL ); // returns the ypos where it finishes drawing
 
@@ -409,6 +410,9 @@ private:
 	cvar_t *cl_showpacketloss;
 	cvar_t *cl_showplayerversion;
 	cvar_t *cl_show_scoreboard_on_death;
+
+	// Max Payne 3 scoreboard icon textures (gfx/mp3/sb_*.png; 0 = not loaded -> classic fallback)
+	int m_iSbKills, m_iSbDeaths, m_iSbAssists, m_iSbMic;
 };
 
 //

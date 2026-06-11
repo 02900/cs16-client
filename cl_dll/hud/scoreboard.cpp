@@ -29,6 +29,9 @@
 #include "draw_util.h"
 #include "vgui_parser.h"
 #include "eventscripts.h"
+#include "mp3font.h"
+#include "mp3textfont.h"
+#include "mp3palette.h"
 
 hud_player_info_t   g_PlayerInfoList[MAX_PLAYERS+1]; // player info from the engine
 extra_player_info_t	g_PlayerExtraInfo[MAX_PLAYERS+1]; // additional player info sent directly to the client dll
@@ -120,7 +123,17 @@ int CHudScoreboard :: VidInit( void )
 	yend = ScreenHeight - ystart;
 	m_bForceDraw = false;
 
-	// Load sprites here
+	// Max Payne 3 scoreboard icons (optional assets; 0 -> classic scoreboard fallback)
+	m_iSbKills = m_iSbDeaths = m_iSbAssists = m_iSbMic = 0;
+	if( g_iXash )
+	{
+		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
+		m_iSbKills   = gRenderAPI.GL_LoadTexture( "gfx/mp3/sb_kills.png",   NULL, 0, f );
+		m_iSbDeaths  = gRenderAPI.GL_LoadTexture( "gfx/mp3/sb_deaths.png",  NULL, 0, f );
+		m_iSbAssists = gRenderAPI.GL_LoadTexture( "gfx/mp3/sb_assists.png", NULL, 0, f );
+		m_iSbMic     = gRenderAPI.GL_LoadTexture( "gfx/mp3/sb_mic.png",     NULL, 0, f );
+	}
+
 	return 1;
 }
 
@@ -187,8 +200,223 @@ int CHudScoreboard :: Draw( float flTime )
 	return DrawScoreboard(flTime);
 }
 
+// --- Max Payne 3 styled TAB scoreboard --------------------------------------------------
+
+// textured icon quad (white art with alpha; tintable)
+static void SB_Icon( int tex, int x, int y, int s, int r, int g, int b, int a )
+{
+	gRenderAPI.GL_Bind( 0, tex );
+	gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+	gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+	gEngfuncs.pTriAPI->Color4ub( r, g, b, a );
+	DrawUtils::Draw2DQuad( x, y, x + s, y + s );
+	gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+}
+
+// copy `name` into `out`, trimming until it fits maxW at cap height H
+static void SB_FitName( const char *name, char *out, int outsz, int H, int maxW )
+{
+	snprintf( out, outsz, "%s", name ? name : "" );
+	int len = (int)strlen( out );
+	while( len > 1 && gMp3Text.StringWidth( out, H ) > maxW )
+		out[--len] = '\0';
+}
+
+struct SBPanelStyle
+{
+	int r, g, b;        // name/number tint (MP3_WHITE for your team, MP3_RED for the enemy's)
+	int icons[3];       // kills / deaths / assists column icon textures
+	int mic;
+};
+
+// one team panel: header (team name + column icons) and the sorted player rows
+static void SB_DrawPanel( int px, int py, int panelW, const char *title,
+                          const int *idx, int count, const SBPanelStyle &st )
+{
+	int rowH   = YRES( 13 );
+	int textH  = YRES( 8 );                  // row cap height
+	int headH  = YRES( 16 );
+	int colW   = XRES( 20 );                 // tight stat columns like MP3
+	int iconS  = YRES( 9 );
+	int nameX  = px + XRES( 14 );            // room for the mic icon at the left edge
+	int nameW  = panelW - XRES( 14 ) - 3 * colW - XRES( 6 );
+
+	// header: team name left, stat icons over their columns
+	gMp3Text.DrawStringBig( px, py + headH - YRES( 3 ), YRES( 10 ), title, st.r, st.g, st.b, 255 );
+	for( int c = 0; c < 3; c++ )
+	{
+		int cx = px + panelW - ( 3 - c ) * colW + colW / 2;
+		SB_Icon( st.icons[c], cx - iconS / 2, py + ( headH - iconS ) / 2, iconS, MP3_WHITE, 235 );
+	}
+
+	int y = py + headH + YRES( 2 );
+	for( int n = 0; n < count; n++, y += rowH )
+	{
+		int i = idx[n];
+		bool me   = g_PlayerInfoList[i].thisplayer != 0;
+		bool dead = g_PlayerExtraInfo[i].dead;
+
+		// rows alternate a light translucent band with full transparency (MP3 look);
+		// the local player's row is brighter still
+		if( !( n & 1 ) )
+			FillRGBABlend( px, y, panelW, rowH - YRES( 1 ), 255, 255, 255, 28 );
+		if( me )
+			FillRGBABlend( px, y, panelW, rowH - YRES( 1 ), 255, 255, 255, 35 );
+
+		int base = y + ( rowH + textH ) / 2;  // text baseline, vertically centered in the row
+		int nr = dead ? MP3_GRAY_DK_R : st.r;
+		int ng = dead ? MP3_GRAY_DK_G : st.g;
+		int nb = dead ? MP3_GRAY_DK_B : st.b;
+
+		if( g_PlayerExtraInfo[i].talking && st.mic )
+			SB_Icon( st.mic, px + XRES( 2 ), y + ( rowH - YRES( 9 ) ) / 2, YRES( 9 ), MP3_WHITE, 220 );
+
+		char name[64];
+		SB_FitName( g_PlayerInfoList[i].name, name, sizeof( name ), textH, nameW );
+		gMp3Text.DrawStringOutlined( nameX, base, textH, name, nr, ng, nb, 255 );
+
+		int vals[3] = { g_PlayerExtraInfo[i].frags, g_PlayerExtraInfo[i].deaths, g_PlayerInfoList[i].ping };
+		for( int c = 0; c < 3; c++ )
+		{
+			int v = vals[c] < 0 ? 0 : vals[c];
+			int cx = px + panelW - ( 3 - c ) * colW + colW / 2;
+			int w = gMp3Font.NumberWidth( v, textH );
+			gMp3Font.DrawNumber( cx - w / 2, y + ( rowH - textH ) / 2, textH, v, nr, ng, nb, 255 );
+		}
+	}
+}
+
+int CHudScoreboard :: DrawScoreboardMP3( void )
+{
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+	if( !cl_hud_mp3->value || !gMp3Text.Ready() || !gMp3Font.Ready()
+	    || !m_iSbKills || !m_iSbDeaths || !m_iSbAssists )
+		return 0; // assets/fonts missing -> classic scoreboard
+
+	GetAllPlayersInfo();
+
+	static cvar_t *ffaCvar = NULL;
+	if( !ffaCvar ) ffaCvar = gEngfuncs.pfnGetCvarPointer( "mp_freeforall" );
+	bool teams = gHUD.m_Teamplay && !( ffaCvar && ffaCvar->value != 0.0f );
+
+	// split players into panels: your team left, the enemy right (FFA: everyone in one panel)
+	int leftTeam = ( g_iTeamNumber == 1 || g_iTeamNumber == 2 ) ? g_iTeamNumber : 2;
+	int leftIdx[MAX_PLAYERS], rightIdx[MAX_PLAYERS];
+	int nLeft = 0, nRight = 0;
+	for( int i = 1; i <= MAX_PLAYERS; i++ )
+	{
+		if( !g_PlayerInfoList[i].name || !g_PlayerInfoList[i].name[0] )
+			continue;
+		int tn = g_PlayerExtraInfo[i].teamnumber;
+		if( !teams )
+		{
+			if( tn != TEAM_SPECTATOR ) leftIdx[nLeft++] = i;
+		}
+		else if( tn == leftTeam )       leftIdx[nLeft++] = i;
+		else if( tn == 1 || tn == 2 )   rightIdx[nRight++] = i;
+	}
+
+	// sort each panel by frags (desc) -- small N, selection sort is fine
+	for( int pass = 0; pass < 2; pass++ )
+	{
+		int *a = pass ? rightIdx : leftIdx;
+		int  n = pass ? nRight  : nLeft;
+		for( int j = 0; j < n - 1; j++ )
+		{
+			int best = j;
+			for( int k = j + 1; k < n; k++ )
+				if( g_PlayerExtraInfo[a[k]].frags > g_PlayerExtraInfo[a[best]].frags )
+					best = k;
+			int t = a[j]; a[j] = a[best]; a[best] = t;
+		}
+	}
+
+	// layout: compact table, centered on the screen (matches the MP3 reference)
+	int panelW = XRES( 190 );
+	int gapW   = XRES( 16 );
+	int rowH   = YRES( 13 );
+	int headH  = YRES( 16 );
+	int maxRows = max( nLeft, teams ? nRight : 0 );
+
+	int tableH = headH + YRES( 2 ) + maxRows * rowH;
+	int topY   = ( ScreenHeight - tableH ) / 2;       // vertical center
+
+	// full-width dark band behind the table (the MP3 letterbox strip)
+	int bandH = tableH + YRES( 16 );
+	FillRGBABlend( 0, topY - YRES( 8 ), ScreenWidth, bandH + YRES( 8 ), 0, 0, 0, 140 );
+
+	// title: map name on a black chip, floating above the band
+	{
+		char map[64];
+		const char *lvl = gEngfuncs.pfnGetLevelName(); // "maps/de_dust2.bsp"
+		const char *base = lvl ? strrchr( lvl, '/' ) : NULL;
+		snprintf( map, sizeof( map ), "%s", base ? base + 1 : ( lvl ? lvl : "" ) );
+		char *dot = strrchr( map, '.' );
+		if( dot ) *dot = '\0';
+		for( char *p = map; *p; p++ ) *p = toupper( *p );
+
+		int H = YRES( 12 );
+		int padX = H / 2, padY = H / 3;     // roomy chip like the MP3 title
+		int tw = gMp3Text.StringWidthBig( map, H );
+		int cx = ScreenWidth / 2 - tw / 2;
+		int cy = topY - YRES( 30 );         // floats alone above the table band
+		FillRGBABlend( cx - padX, cy - padY, tw + 2 * padX, H + 2 * padY, MP3_BLACK, 255 );
+		gMp3Text.DrawStringBig( cx, cy + H, H, map, MP3_WHITE, 255 );
+	}
+
+	SBPanelStyle stLeft  = { MP3_WHITE, { m_iSbKills, m_iSbDeaths, m_iSbAssists }, m_iSbMic };
+	SBPanelStyle stRight = { MP3_RED,   { m_iSbKills, m_iSbDeaths, m_iSbAssists }, m_iSbMic };
+
+	if( teams )
+	{
+		int lx = ScreenWidth / 2 - gapW / 2 - panelW;
+		int rx = ScreenWidth / 2 + gapW / 2;
+		const char *ln = "", *rn = "";
+		for( int t = 1; t <= m_iNumTeams; t++ )
+		{
+			if( g_TeamInfo[t].teamnumber == leftTeam ) ln = g_TeamInfo[t].name;
+			else if( g_TeamInfo[t].teamnumber == 1 || g_TeamInfo[t].teamnumber == 2 ) rn = g_TeamInfo[t].name;
+		}
+		SB_DrawPanel( lx, topY, panelW, ln && ln[0] ? ln : "MY TEAM",  leftIdx,  nLeft,  stLeft );
+		SB_DrawPanel( rx, topY, panelW, rn && rn[0] ? rn : "ENEMIES",  rightIdx, nRight, stRight );
+	}
+	else
+	{
+		SB_DrawPanel( ScreenWidth / 2 - panelW / 2, topY, panelW, "PLAYERS", leftIdx, nLeft, stLeft );
+	}
+
+	// spectators on one dim line under the band
+	{
+		char spec[256] = "";
+		int sl = 0;
+		for( int i = 1; i <= MAX_PLAYERS; i++ )
+		{
+			if( !g_PlayerInfoList[i].name || !g_PlayerInfoList[i].name[0] )
+				continue;
+			if( g_PlayerExtraInfo[i].teamnumber != TEAM_SPECTATOR )
+				continue;
+			sl += snprintf( spec + sl, sizeof( spec ) - sl, "%s%s", sl ? ", " : "", g_PlayerInfoList[i].name );
+			if( sl >= (int)sizeof( spec ) - 1 ) break;
+		}
+		if( spec[0] )
+		{
+			char line[300];
+			snprintf( line, sizeof( line ), "SPECTATORS: %s", spec );
+			int H = YRES( 7 );
+			int y = topY - YRES( 8 ) + bandH + YRES( 8 ) + H + YRES( 4 );
+			gMp3Text.DrawStringOutlined( ScreenWidth / 2 - gMp3Text.StringWidth( line, H ) / 2, y, H, line, MP3_GRAY_DK, 255 );
+		}
+	}
+
+	return 1;
+}
+
 int CHudScoreboard :: DrawScoreboard( float fTime )
 {
+	if( DrawScoreboardMP3() )
+		return 1;
+
 	GetAllPlayersInfo();
 	char ServerName[90];
 
