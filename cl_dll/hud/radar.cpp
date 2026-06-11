@@ -222,6 +222,7 @@ int CHudRadar::VidInit(void)
 	// force the overview minimap to (re)load for the new map on next Draw
 	m_pMiniMap = NULL;
 	m_szMiniLevel[0] = 0;
+	m_iBlueprintTex = 0;
 	m_iRadarY = ScreenHeight; // placeholder until the first Draw computes the real anchor
 
 	// Max Payne 3 radar art (imported via scripts/import_mp3_assets.py). Optional: if the
@@ -628,14 +629,16 @@ void CHudRadar::WorldToMini( float wx, float wy, float cy, float sy, float &px, 
 	py = m_iRadarY + iMaxRadius - ( cy * dx + sy * dy ) / RADAR_SCALE;
 }
 
-// (Re)load the overview for the current map, only when the level changes. Reuses the spectator's
-// overview parser. Returns true if a geometry minimap is available.
+// (Re)load the overview for the current map, only when the level changes. Prefers the MP3
+// blueprint minimap (scripts/gen_minimap_blueprint.py output) and falls back to the spectator's
+// overview. Returns true if a geometry minimap is available.
 bool CHudRadar::UpdateMiniMap()
 {
 	const char *level = gEngfuncs.pfnGetLevelName();
 	if( !level || !level[0] )
 	{
 		m_pMiniMap = NULL;
+		m_iBlueprintTex = 0;
 		m_szMiniLevel[0] = 0;
 		return false;
 	}
@@ -645,6 +648,34 @@ bool CHudRadar::UpdateMiniMap()
 		strncpy( m_szMiniLevel, level, sizeof( m_szMiniLevel ) - 1 );
 		m_szMiniLevel[sizeof( m_szMiniLevel ) - 1] = 0;
 
+		// MP3 blueprint: gfx/mp3/minimaps/<map>.png + sidecar txt with its world extent
+		m_iBlueprintTex = 0;
+		if( bUseRenderAPI )
+		{
+			char name[64], path[128];
+			const char *base = strrchr( level, '/' );
+			snprintf( name, sizeof( name ), "%s", base ? base + 1 : level ); // "de_dust2.bsp"
+			char *dot = strrchr( name, '.' );
+			if( dot ) *dot = '\0';
+
+			snprintf( path, sizeof( path ), "gfx/mp3/minimaps/%s.txt", name );
+			char *buf = (char *)gEngfuncs.COM_LoadFile( path, 5, NULL );
+			if( buf )
+			{
+				float bminx, bminy, bmaxx, bmaxy;
+				if( sscanf( buf, "%f %f %f %f", &bminx, &bminy, &bmaxx, &bmaxy ) == 4
+				    && bmaxx > bminx && bmaxy > bminy )
+				{
+					snprintf( path, sizeof( path ), "gfx/mp3/minimaps/%s.png", name );
+					texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
+					m_iBlueprintTex = gRenderAPI.GL_LoadTexture( path, NULL, 0, f );
+					m_flBPBounds[0] = bminx; m_flBPBounds[1] = bminy;
+					m_flBPBounds[2] = bmaxx; m_flBPBounds[3] = bmaxy;
+				}
+				gEngfuncs.COM_FreeFile( buf );
+			}
+		}
+
 		gHUD.m_Spectator.ParseOverviewFile();
 		if( gHUD.m_Spectator.m_OverviewData.layers > 0 )
 			m_pMiniMap = gEngfuncs.LoadMapSprite( gHUD.m_Spectator.m_OverviewData.layersImages[0] );
@@ -652,7 +683,7 @@ bool CHudRadar::UpdateMiniMap()
 			m_pMiniMap = NULL;
 	}
 
-	return m_pMiniMap != NULL;
+	return m_pMiniMap != NULL || m_iBlueprintTex != 0;
 }
 
 // Draw the overview map tiles into the radar area, rotated to the player's heading and tinted gray
@@ -661,23 +692,15 @@ bool CHudRadar::UpdateMiniMap()
 // overview is loaded (caller falls back to the classic radar circle).
 bool CHudRadar::DrawMiniMap()
 {
-	if( !m_pMiniMap )
-		return false;
-
-	overviewInfo_t &ov = gHUD.m_Spectator.m_OverviewData;
-	const float screenaspect = 4.0f / 3.0f;
-
-	int t = m_pMiniMap->numframes / ( 4 * 3 );
-	t = (int)sqrt( (double)t );
-	int xTiles = t * 4, yTiles = t * 3;
-	if( xTiles <= 0 || yTiles <= 0 )
+	bool hasBlueprint = m_iBlueprintTex != 0 && bUseRenderAPI;
+	if( !m_pMiniMap && !hasBlueprint )
 		return false;
 
 	float yaw = DEG2RAD( gHUD.m_vecAngles.y );
 	float cy = cos( yaw ), sy = sin( yaw );
 
 	// dark backing disc so the circle interior reads as the MP3 night-blueprint even where the
-	// overview tiles don't reach (scanline strips: the render API has no scissor/stencil mask)
+	// map art doesn't reach (scanline strips: the render API has no scissor/stencil mask)
 	{
 		int ccx = m_iRadarX + iMaxRadius;
 		int ccy = m_iRadarY + iMaxRadius;
@@ -692,6 +715,66 @@ bool CHudRadar::DrawMiniMap()
 	// keeps the map roughly circular and stops it spilling across the screen.
 	float cullRange = iMaxRadius * RadarScale() * 1.15f;
 	float cullRange2 = cullRange * cullRange;
+
+	// --- MP3 blueprint: light floors on alpha, generated from the BSP. Drawn as an NxN grid of
+	// sub-quads of one texture so the existing per-tile circle culling keeps working. ---
+	if( hasBlueprint )
+	{
+		const int N = 12;
+		float minx = m_flBPBounds[0], miny = m_flBPBounds[1];
+		float maxx = m_flBPBounds[2], maxy = m_flBPBounds[3];
+		float stepX = ( maxx - minx ) / N;
+		float stepY = ( maxy - miny ) / N;
+
+		gRenderAPI.GL_Bind( 0, m_iBlueprintTex );
+		gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+		gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+		gEngfuncs.pTriAPI->Color4f( 1.0f, 1.0f, 1.0f, 0.95f ); // the texture IS the style
+
+		for( int ix = 0; ix < N; ix++ )
+		{
+			for( int iy = 0; iy < N; iy++ )
+			{
+				float wx0 = minx + ix * stepX, wx1 = wx0 + stepX;
+				float wy0 = miny + iy * stepY, wy1 = wy0 + stepY;
+				float ddx = ( wx0 + wx1 ) * 0.5f - gHUD.m_vecOrigin.x;
+				float ddy = ( wy0 + wy1 ) * 0.5f - gHUD.m_vecOrigin.y;
+				if( ddx * ddx + ddy * ddy > cullRange2 )
+					continue;
+
+				float u0 = (float)ix / N, u1 = (float)( ix + 1 ) / N;
+				// PNG row 0 = world maxy (north up) -> v = (maxy - wy) / (maxy - miny)
+				float v0 = ( maxy - wy0 ) / ( maxy - miny );
+				float v1 = ( maxy - wy1 ) / ( maxy - miny );
+
+				float px0, py0, px1, py1, px2, py2, px3, py3;
+				WorldToMini( wx0, wy0, cy, sy, px0, py0 );
+				WorldToMini( wx1, wy0, cy, sy, px1, py1 );
+				WorldToMini( wx1, wy1, cy, sy, px2, py2 );
+				WorldToMini( wx0, wy1, cy, sy, px3, py3 );
+
+				gEngfuncs.pTriAPI->Begin( TRI_QUADS );
+				gEngfuncs.pTriAPI->TexCoord2f( u0, v0 ); gEngfuncs.pTriAPI->Vertex3f( px0, py0, 0 );
+				gEngfuncs.pTriAPI->TexCoord2f( u1, v0 ); gEngfuncs.pTriAPI->Vertex3f( px1, py1, 0 );
+				gEngfuncs.pTriAPI->TexCoord2f( u1, v1 ); gEngfuncs.pTriAPI->Vertex3f( px2, py2, 0 );
+				gEngfuncs.pTriAPI->TexCoord2f( u0, v1 ); gEngfuncs.pTriAPI->Vertex3f( px3, py3, 0 );
+				gEngfuncs.pTriAPI->End();
+			}
+		}
+
+		gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
+		gEngfuncs.pTriAPI->Color4f( 1, 1, 1, 1 );
+		return true;
+	}
+
+	overviewInfo_t &ov = gHUD.m_Spectator.m_OverviewData;
+	const float screenaspect = 4.0f / 3.0f;
+
+	int t = m_pMiniMap->numframes / ( 4 * 3 );
+	t = (int)sqrt( (double)t );
+	int xTiles = t * 4, yTiles = t * 3;
+	if( xTiles <= 0 || yTiles <= 0 )
+		return false;
 
 	gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
 	gEngfuncs.pTriAPI->CullFace( TRI_NONE );
