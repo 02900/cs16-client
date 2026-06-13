@@ -529,6 +529,9 @@ public:
 	int Draw( float flTime );
 	CHudMsgFunc(DeathMsg);
 
+	// join/leave notices shown in the kill feed (called from the TextMsg interception)
+	void AddJoinLeaveNotice( const char *name, bool joined, bool isCT );
+
 private:
 	bool DrawDeathScreen( void ); // MP3 "KILLED BY" panel + CRT filter while dead; true if shown
 

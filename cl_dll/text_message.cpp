@@ -187,7 +187,11 @@ int CHudTextMessage::MsgFunc_TextMsg( const char *pszName, int iSize, void *pbuf
 	int clientIdx = -1;
 
 	static char szBuf[6][MAX_TEXTMSG_STRING];
-	char *msg_text = LookupString( reader.ReadString(), &msg_dest );
+	char szRawId[64]; // unlocalized format id (e.g. "#Game_join_ct"), for the MP3 interception
+	char *rawfmt = reader.ReadString();
+	strncpy( szRawId, rawfmt ? rawfmt : "", sizeof( szRawId ) );
+	szRawId[sizeof( szRawId ) - 1] = 0;
+	char *msg_text = LookupString( rawfmt, &msg_dest );
 	msg_text = strncpy( szBuf[0], msg_text, MAX_TEXTMSG_STRING );
 	szBuf[0][MAX_TEXTMSG_STRING - 1] = 0;
 
@@ -210,6 +214,30 @@ int CHudTextMessage::MsgFunc_TextMsg( const char *pszName, int iSize, void *pbuf
 	char *psz = szBuf[5];
 
 	const char *args[4] = { szBuf[1], szBuf[2], szBuf[3], szBuf[4] };
+
+	// Max Payne 3 HUD: join/leave events go to the kill feed instead of the engine's
+	// top-left notify text (which is suppressed by returning early).
+	{
+		static cvar_t *cl_hud_mp3 = NULL;
+		if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+		if( cl_hud_mp3->value )
+		{
+			bool joinT  = !strcmp( szRawId, "#Game_join_terrorist" ) || !strcmp( szRawId, "#Game_join_terrorist_auto" );
+			bool joinCT = !strcmp( szRawId, "#Game_join_ct" )        || !strcmp( szRawId, "#Game_join_ct_auto" );
+			if( joinT || joinCT )
+			{
+				gHUD.m_DeathNotice.AddJoinLeaveNotice( szBuf[1], true, joinCT );
+				return 1;
+			}
+			if( !strcmp( szRawId, "#Game_disconnected" ) )
+			{
+				gHUD.m_DeathNotice.AddJoinLeaveNotice( szBuf[1], false, false );
+				return 1;
+			}
+			if( !strcmp( szRawId, "#Game_connected" ) )
+				return 1; // suppressed: the real JOINED notice appears when they pick a team
+		}
+	}
 
 	switch ( msg_dest )
 	{

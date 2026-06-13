@@ -29,11 +29,18 @@
 
 float color[3];
 
+// feed entry kinds (iType): kills plus the MP3-style join/leave notices
+#define NOTICE_KILL	0
+#define NOTICE_JOIN	1
+#define NOTICE_LEAVE	2
+
 struct DeathNoticeItem {
 	char szKiller[MAX_PLAYER_NAME_LENGTH*2];
 	char szVictim[MAX_PLAYER_NAME_LENGTH*2];
 	char szWeapon[32];	// weapon name as text (Max Payne 3 kill feed)
-	int iId;	// the index number of the associated sprite
+	int iId;	// the index number of the associated sprite (0 = empty slot, -1 = no sprite)
+	int iType;	// NOTICE_* kind
+	bool bNoticeCT;	// join notices: the team joined (colors enemies red)
 	bool bSuicide;
 	bool bTeamKill;
 	bool bNonPlayerKill;
@@ -207,6 +214,11 @@ int CHudDeathNotice :: Draw( float flTime )
 	if( DrawDeathScreen() )
 		return 1; // the death screen owns the view; the kill feed would clutter the panel
 
+	// entries stack upward from the radar; each one subtracts its own height (kills are two
+	// lines, join/leave notices one)
+	int mp3Bottom = gHUD.m_Radar.RadarTopY() - YRES( 10 );
+	int clBottom  = gHUD.m_Radar.RadarTopY() - YRES( 12 );
+
 	for( i = 0; i < MAX_DEATHNOTICES; i++ )
 	{
 		if ( rgDeathNoticeList[i].iId == 0 )
@@ -241,38 +253,68 @@ int CHudDeathNotice :: Draw( float flTime )
 			int wb = rgDeathNoticeList[i].bTeamKill ? 30  : MP3_GRAY_DK_B;
 			x = XRES( 8 );
 
+			// join/leave notices: one line, "NAME JOINED|LEFT" -- name red when an enemy joins
+			bool joinLeave = rgDeathNoticeList[i].iType != NOTICE_KILL;
+			int nr = MP3_WHITE_R, ng = MP3_WHITE_G, nb = MP3_WHITE_B;
+			if ( rgDeathNoticeList[i].iType == NOTICE_JOIN && g_iTeamNumber != 0
+			     && ( rgDeathNoticeList[i].bNoticeCT ? 2 : 1 ) != g_iTeamNumber )
+			{
+				nr = MP3_RED_R; ng = MP3_RED_G; nb = MP3_RED_B;
+			}
+			const char *suffix = rgDeathNoticeList[i].iType == NOTICE_JOIN ? "JOINED" : "LEFT";
+
 			if ( gMp3Text.Ready() )
 			{
 				int H = YRES( 11 ) / 2;             // cap height (half of before)
 				int lineH = (int)( H * 1.7f );      // line spacing (room for descenders)
-				int blockH = 2 * lineH + YRES( 6 );
-				int blockBottom = gHUD.m_Radar.RadarTopY() - YRES( 10 ) - i * blockH;
-				int base2 = blockBottom - YRES( 5 );   // weapon + victim baseline
-				int base1 = base2 - lineH;             // killer baseline
 
-				if ( !rgDeathNoticeList[i].bSuicide )
-					gMp3Text.DrawStringOutlined( x, base1, H, rgDeathNoticeList[i].szKiller, MP3_WHITE, 255 );
+				if ( joinLeave )
+				{
+					int base1 = mp3Bottom - YRES( 5 );
+					int vx = gMp3Text.DrawStringOutlined( x, base1, H, rgDeathNoticeList[i].szKiller, nr, ng, nb, 255 );
+					gMp3Text.DrawStringOutlined( vx + XRES( 6 ), base1, H, suffix, MP3_GRAY_DK, 255 );
+					mp3Bottom -= lineH + YRES( 4 );
+				}
+				else
+				{
+					int base2 = mp3Bottom - YRES( 5 );   // weapon + victim baseline
+					int base1 = base2 - lineH;             // killer baseline
 
-				int vx = gMp3Text.DrawStringOutlined( x, base2, H, weap, wr, wg, wb, 255 );
-				vx += XRES( 6 );
-				if ( !rgDeathNoticeList[i].bNonPlayerKill )
-					gMp3Text.DrawStringOutlined( vx, base2, H, rgDeathNoticeList[i].szVictim, MP3_RED, 255 );
+					if ( !rgDeathNoticeList[i].bSuicide )
+						gMp3Text.DrawStringOutlined( x, base1, H, rgDeathNoticeList[i].szKiller, MP3_WHITE, 255 );
+
+					int vx = gMp3Text.DrawStringOutlined( x, base2, H, weap, wr, wg, wb, 255 );
+					vx += XRES( 6 );
+					if ( !rgDeathNoticeList[i].bNonPlayerKill )
+						gMp3Text.DrawStringOutlined( vx, base2, H, rgDeathNoticeList[i].szVictim, MP3_RED, 255 );
+					mp3Bottom -= 2 * lineH + YRES( 6 );
+				}
 			}
 			else
 			{
 				// fallback: CS HUD font
 				float sc = 1.4f;
 				int lineH = (int)( gHUD.m_iFontHeight * sc ) + YRES( 2 );
-				int blockH = 2 * lineH + YRES( 6 );
-				int blockBottom = gHUD.m_Radar.RadarTopY() - YRES( 12 ) - i * blockH;
-				int y1 = blockBottom - 2 * lineH;
-				int y2 = blockBottom - lineH;
-				if ( !rgDeathNoticeList[i].bSuicide )
-					DrawUtils::DrawHudString( x, y1, ScreenWidth, rgDeathNoticeList[i].szKiller, 255, 255, 255, sc );
-				int vx = DrawUtils::DrawHudString( x, y2, ScreenWidth, weap, wr, wg, wb, sc );
-				vx += XRES( 6 );
-				if ( !rgDeathNoticeList[i].bNonPlayerKill )
-					DrawUtils::DrawHudString( vx, y2, ScreenWidth, rgDeathNoticeList[i].szVictim, 235, 60, 60, sc );
+
+				if ( joinLeave )
+				{
+					int y1 = clBottom - lineH;
+					int vx = DrawUtils::DrawHudString( x, y1, ScreenWidth, rgDeathNoticeList[i].szKiller, nr, ng, nb, sc );
+					DrawUtils::DrawHudString( vx + XRES( 6 ), y1, ScreenWidth, suffix, 170, 170, 170, sc );
+					clBottom -= lineH + YRES( 4 );
+				}
+				else
+				{
+					int y1 = clBottom - 2 * lineH;
+					int y2 = clBottom - lineH;
+					if ( !rgDeathNoticeList[i].bSuicide )
+						DrawUtils::DrawHudString( x, y1, ScreenWidth, rgDeathNoticeList[i].szKiller, 255, 255, 255, sc );
+					int vx = DrawUtils::DrawHudString( x, y2, ScreenWidth, weap, wr, wg, wb, sc );
+					vx += XRES( 6 );
+					if ( !rgDeathNoticeList[i].bNonPlayerKill )
+						DrawUtils::DrawHudString( vx, y2, ScreenWidth, rgDeathNoticeList[i].szVictim, 235, 60, 60, sc );
+					clBottom -= 2 * lineH + YRES( 6 );
+				}
 			}
 		}
 	}
@@ -281,6 +323,35 @@ int CHudDeathNotice :: Draw( float flTime )
 		m_iFlags &= ~HUD_DRAW; // disable hud item
 
 	return 1;
+}
+
+// Push a join/leave notice into the kill feed (called from MsgFunc_TextMsg interception;
+// the engine's default top-left notify text for these events is suppressed there).
+void CHudDeathNotice :: AddJoinLeaveNotice( const char *name, bool joined, bool isCT )
+{
+	if ( !name || !name[0] )
+		return;
+
+	m_iFlags |= HUD_DRAW;
+
+	int i;
+	for ( i = 0; i < MAX_DEATHNOTICES; i++ )
+	{
+		if ( rgDeathNoticeList[i].iId == 0 )
+			break;
+	}
+	if ( i == MAX_DEATHNOTICES )
+	{ // list is full: drop the oldest
+		memmove( rgDeathNoticeList, rgDeathNoticeList + 1, sizeof(DeathNoticeItem) * MAX_DEATHNOTICES );
+		i = MAX_DEATHNOTICES - 1;
+	}
+
+	memset( &rgDeathNoticeList[i], 0, sizeof( DeathNoticeItem ) );
+	rgDeathNoticeList[i].iId = -1; // occupied, but no weapon sprite
+	rgDeathNoticeList[i].iType = joined ? NOTICE_JOIN : NOTICE_LEAVE;
+	rgDeathNoticeList[i].bNoticeCT = isCT;
+	strlcpy( rgDeathNoticeList[i].szKiller, name, sizeof( rgDeathNoticeList[i].szKiller ) );
+	rgDeathNoticeList[i].flDisplayTime = gHUD.m_flTime + hud_deathnotice_time->value;
 }
 
 // This message handler may be better off elsewhere
@@ -318,6 +389,9 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 	//if (gViewPort)
 		//gViewPort->GetAllPlayersInfo();
 	gHUD.m_Scoreboard.GetAllPlayersInfo();
+
+	rgDeathNoticeList[i].iType = NOTICE_KILL; // slots are reused; clear any join/leave leftovers
+	rgDeathNoticeList[i].bNoticeCT = false;
 
 	// Get the Killer's name
 	const char *killer_name = NULL;
