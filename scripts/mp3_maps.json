@@ -1,7 +1,7 @@
 {
   "_comment": "Max Payne 3 level sections to export as GoldSrc maps into the cs16-client gamedir. Geometry comes from each level's collision mesh (.wbd/.wbn) via mp3-rpf-tools 'cs16-export'. The decoded geometry is Rockstar IP and is NOT committed -- run scripts/import_mp3_map.py against your own Max Payne 3 install. Only this manifest and the script are tracked; the work cache (.mp3cache/) and the installed .bsp/.wad (in the gamedir) are not.",
 
-  "_fields": "name (map/bsp name), archive (level .rpf path relative to the Max Payne 3 install root), entry (.wbd/.wbn name inside it; omit with visual). Optional: visual (bool: geometry from the level's placed .wdr drawables with real per-face UVs and one WAD texture per material -- denser than collision, crop tighter), scale (units/metre, default 40), thickness, crop ('xmin,ymin,zmin,xmax,ymax,zmax' in MP3 metres -- carve one room), voxel (rasterize to axis-aligned boxes of N metres -- the only way a whole level fits; smaller = more detail + brushes), max_tris, tex_scale, spawns. Collision-mode textures are assigned by face orientation: tex_floor / tex_wall / tex_ceiling are .wtd texture names from the level (auto-picked by keyword if omitted); 'texture' (a PNG path) overrides all three with one image. Lighting comes from the level's own rage_light objects (light / light_spot entities baked by hlrad): lights (bool, default true; false keeps the single auto light) and light_scale (GoldSrc brightness per RAGE intensity unit, default 15).",
+  "_fields": "name (map/bsp name), archive (level .rpf path relative to the Max Payne 3 install root), entry (.wbd/.wbn name inside it; omit with visual). Optional: visual (bool: geometry from the level's placed .wdr drawables with real per-face UVs and one WAD texture per material -- denser than collision, crop tighter; textures the room archive lacks are auto-resolved from the level's shared/gtxd archives), scale (units/metre, default 40), thickness, crop ('xmin,ymin,zmin,xmax,ymax,zmax' in MP3 metres -- carve one room), voxel (rasterize to axis-aligned boxes of N metres -- the only way a whole level fits; smaller = more detail + brushes), max_tris, tex_scale, spawns. Collision-mode textures are assigned by face orientation: tex_floor / tex_wall / tex_ceiling are .wtd texture names from the level (auto-picked by keyword if omitted); 'texture' (a PNG path) overrides all three with one image. Lighting comes from the level's own rage_light objects (light / light_spot entities baked by hlrad): lights (bool, default true; false keeps the single auto light) and light_scale (GoldSrc brightness per RAGE intensity unit, default 15).",
 
   "maps": [
     {
@@ -22,6 +22,15 @@
       "visual": true,
       "scale": 40,
       "crop": "-6,-6,-1,-1,2,4"
+    },
+    {
+      "name": "mp3_voflobby_vis",
+      "_note": "front slice of the grand office lobby, VISUAL mesh (.wdr). Its wall/carpet/concrete textures live in the level's shared dicts (gtxd parent + props .rpf) and are now resolved automatically -- 7 textures pulled in, none on the dev checker. lights:false -> this slice captures only 1 (dim) rage_light, so we force the bright auto-light fallback to actually see the room",
+      "archive": "pc/levels/v_office/interiors/v_of_lobby.rpf",
+      "visual": true,
+      "scale": 40,
+      "crop": "-16.6,10.1,-0.5,-6.7,13.5,4.7",
+      "lights": false
     },
     {
       "name": "mp3_vofarch_full",
