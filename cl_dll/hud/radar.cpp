@@ -44,6 +44,10 @@ version.
 // Max Payne 3 minimap zoom: higher = closer. Shared by the player dots and the overview tiles
 // so they always stay aligned. World units per radar pixel = 32 / zoom.
 static cvar_t *cl_radar_zoom = NULL;
+// seconds a teammate's server-pushed Radar position stays valid; older blips are hidden
+// (the message has no lifecycle, so stale/disconnected slots used to ghost forever)
+#define RADAR_TEAMMATE_TTL	3.0f
+
 static float RadarScale()
 {
 	float z = ( cl_radar_zoom && cl_radar_zoom->value > 0.1f ) ? cl_radar_zoom->value : 1.0f;
@@ -260,6 +264,7 @@ int CHudRadar::MsgFunc_Radar(const char *pszName,  int iSize, void *pbuf )
 	g_PlayerExtraInfo[index].origin.x = reader.ReadCoord();
 	g_PlayerExtraInfo[index].origin.y = reader.ReadCoord();
 	g_PlayerExtraInfo[index].origin.z = reader.ReadCoord();
+	g_PlayerExtraInfo[index].radarpostime = gHUD.m_flTime; // freshness stamp (see RADAR_TEAMMATE_TTL)
 	return 1;
 }
 
@@ -303,9 +308,35 @@ bool CHudRadar::HostageFlashTime( float flTime, hostage_info_t *pplayer )
 	return pplayer->nextflash;
 }
 
+// small filled chevron next to a blip, pointing up (target above us) or down (below us)
+void CHudRadar::DrawChevron( int x, int y, bool up, int r, int g, int b, int a )
+{
+	int cx = m_iRadarX + iMaxRadius + x;
+	int cy = m_iRadarY + iMaxRadius + y;
+	int h = max( 2, XRES( 2 ) );          // chevron half-height
+	int oy = cy - XRES( 3 ) - h - 1;      // sits just above the blip circle
+	for( int row = 0; row <= h; row++ )
+	{
+		int half = up ? row : ( h - row );
+		FillRGBABlend( cx - half, oy + row, 2 * half + 1, 1, r, g, b, a );
+	}
+}
+
 void CHudRadar::DrawZAxis( Vector pos, int r, int g, int b, int a )
 {
 	const float diff = 128;
+
+	// MP3 style: always the round blip; height shown as a chevron above it (the classic T
+	// shapes read as squares at radar size and look like a different blip type)
+	if( bUseRenderAPI && m_iBlipTex )
+	{
+		DrawRadarDot( pos.x, pos.y, r, g, b, a );
+		if( pos.z <= -diff )
+			DrawChevron( pos.x, pos.y, true, r, g, b, a );  // target is above us
+		else if( pos.z >= diff )
+			DrawChevron( pos.x, pos.y, false, r, g, b, a ); // target is below us
+		return;
+	}
 
 	if( pos.z > -diff && pos.z < diff )
 	{
@@ -367,6 +398,9 @@ int CHudRadar::Draw(float flTime)
 		gEngfuncs.pTriAPI->Brightness( 1 );
 	}
 
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+
 	for(int i = 0; i < 33; i++)
 	{
 		// skip local player and dead players
@@ -377,13 +411,23 @@ int CHudRadar::Draw(float flTime)
 		if( g_PlayerExtraInfo[i].teamnumber != iTeamNumber )
 			continue;
 
+		// the Radar position is a server-pushed snapshot with no lifecycle: skip slots whose
+		// position was never set or went stale (disconnected/rebalanced bots left ghosts)
+		if( g_PlayerExtraInfo[i].radarpostime <= 0.0f
+		    || flTime - g_PlayerExtraInfo[i].radarpostime > RADAR_TEAMMATE_TTL )
+			continue;
+		GetPlayerInfo( i, &g_PlayerInfoList[i] );
+		if( !g_PlayerInfoList[i].name || !g_PlayerInfoList[i].name[0] )
+			continue; // empty slot (player disconnected)
+
 		// decide should player draw at this time. For flashing.
 		// Always true for non-flashing players
 		if( !FlashTime( flTime, &g_PlayerExtraInfo[i]) )
 			continue;
 
-		// player with C4 or VIP must be red
-		if( g_PlayerExtraInfo[i].has_c4 || g_PlayerExtraInfo[i].vip )
+		// player with C4 or VIP must be red -- but not in the MP3 HUD, where red strictly
+		// means ENEMY (a bomb-carrying teammate read as a ghost enemy blip)
+		if( ( g_PlayerExtraInfo[i].has_c4 || g_PlayerExtraInfo[i].vip ) && !cl_hud_mp3->value )
 		{
 			DrawUtils::UnpackRGB( r, g, b, RGB_REDISH );
 		}

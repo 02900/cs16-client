@@ -47,6 +47,7 @@ private:
 
 	void DrawT( int x, int y, int r, int g, int b, int a );
 	void DrawFlippedT( int x, int y, int r, int g, int b, int a );
+	void DrawChevron( int x, int y, bool up, int r, int g, int b, int a ); // MP3 height marker
 	bool HostageFlashTime( float flTime, struct hostage_info_t *pplayer );
 	bool FlashTime( float flTime, struct extra_player_info_t *pplayer );
 	Vector WorldToRadar(const Vector vPlayerOrigin, const Vector vObjectOrigin, const Vector vAngles );

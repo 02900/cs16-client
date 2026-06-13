@@ -472,6 +472,7 @@ struct extra_player_info_t
 	float radarflashtime;
 	float radarflashtimedelta;
 	bool nextflash;
+	float radarpostime;	// hud time of the last Radar position update (0 = never; for expiry)
 
 	short playerclass;
 	short teamnumber;
