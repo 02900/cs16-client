@@ -547,6 +547,9 @@ private:
 	int  m_iMyLastKillerIdx;      // for the "KILLED AGAIN BY" counter
 	int  m_iKilledAgainCount;
 	float m_flMyDeathTime;        // hud time of my last death (drives the respawn countdown)
+
+	int m_iMyKillsVs[MAX_PLAYERS + 1];   // how many times I killed player[i] this map
+	int m_iMyDeathsVs[MAX_PLAYERS + 1];  // how many times player[i] killed me this map
 };
 
 //

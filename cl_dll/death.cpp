@@ -92,6 +92,9 @@ void CHudDeathNotice :: InitHUDData( void )
 	m_iMyLastKillerIdx = 0;
 	m_iKilledAgainCount = 0;
 	m_flMyDeathTime = 0.0f;
+
+	memset( m_iMyKillsVs,  0, sizeof(m_iMyKillsVs)  );
+	memset( m_iMyDeathsVs, 0, sizeof(m_iMyDeathsVs) );
 }
 
 
@@ -151,6 +154,34 @@ bool CHudDeathNotice :: DrawDeathScreen( void )
 		tw = gMp3Text.StringWidthBig( m_szMyKillerName, H2 );
 		FillRGBABlend( x - p2x, y - p2y, tw + 2 * p2x, H2 + 2 * p2y, MP3_BLACK, 255 );
 		gMp3Text.DrawStringBig( x, y + H2, H2, m_szMyKillerName, MP3_RED, 255 );
+
+		// H2H counter: [their kills vs me] skull [my kills vs them]
+		if( m_iMyLastKillerIdx >= 1 && m_iMyLastKillerIdx <= MAX_PLAYERS )
+		{
+			int kIdx   = m_iMyLastKillerIdx;
+			int chipY  = y - p2y;
+			int chipH2 = H2 + 2 * p2y;
+			int gap    = XRES( 5 );
+			int xh     = x + tw + p2x + XRES( 8 );
+
+			char numA[8], numB[8];
+			snprintf( numA, sizeof(numA), "%d", m_iMyDeathsVs[kIdx] );
+			snprintf( numB, sizeof(numB), "%d", m_iMyKillsVs[kIdx]  );
+
+			int wA  = gMp3Text.StringWidthBig( numA, H2 );
+			int wB  = gMp3Text.StringWidthBig( numB, H2 );
+			int skW = gHUD.GetSpriteRect( m_HUD_d_skull ).Width();
+			int skH = gHUD.GetSpriteRect( m_HUD_d_skull ).Height();
+
+			FillRGBABlend( xh, chipY, gap + wA + gap + skW + gap + wB + gap, chipH2, MP3_BLACK, 255 );
+			gMp3Text.DrawStringBig( xh + gap, chipY + chipH2 / 2 + H2 / 2, H2, numA, MP3_RED, 255 );
+			xh += gap + wA + gap;
+			SPR_Set( gHUD.GetSprite( m_HUD_d_skull ), 200, 200, 200 );
+			SPR_DrawAdditive( 0, xh, chipY + ( chipH2 - skH ) / 2, &gHUD.GetSpriteRect( m_HUD_d_skull ) );
+			xh += skW + gap;
+			gMp3Text.DrawStringBig( xh, chipY + chipH2 / 2 + H2 / 2, H2, numB, MP3_WHITE, 255 );
+		}
+
 		y += H2 + 2 * p2y + YRES( 10 );
 
 		// weapon: gray d_* sprite + white name on a black chip
@@ -499,6 +530,18 @@ int CHudDeathNotice :: MsgFunc_DeathMsg( const char *pszName, int iSize, void *p
 		else
 			m_iKilledAgainCount = 1;
 		m_iMyLastKillerIdx = m_bMySuicide ? 0 : killer;
+	}
+
+	// Head-to-head tracking (client-side, resets each map)
+	{
+		int me = gHUD.m_Scoreboard.m_iPlayerNum;
+		bool killerIsMe = killer_this_player || killer == me;
+		bool victimIsMe = g_PlayerInfoList[victim].thisplayer || victim == me;
+
+		if( killerIsMe && victim >= 1 && victim <= MAX_PLAYERS && victim != killer )
+			m_iMyKillsVs[victim]++;
+		else if( victimIsMe && killer >= 1 && killer <= MAX_PLAYERS && !rgDeathNoticeList[i].bSuicide )
+			m_iMyDeathsVs[killer]++;
 	}
 
 	// Play kill sound
