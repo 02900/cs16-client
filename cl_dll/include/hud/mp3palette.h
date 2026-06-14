@@ -31,6 +31,12 @@ colors); the bare macro expands to the "r, g, b" triplet for direct use in calls
 #define MP3_RED_B   55
 #define MP3_RED     MP3_RED_R, MP3_RED_G, MP3_RED_B
 
+// blood/damage tint — deep saturated red, near-zero green and blue
+#define MP3_DARK_RED_R  190
+#define MP3_DARK_RED_G  18
+#define MP3_DARK_RED_B  18
+#define MP3_DARK_RED    MP3_DARK_RED_R, MP3_DARK_RED_G, MP3_DARK_RED_B
+
 // light gray: timer chip, armor meter fill, damage-flash (ghost) bar chunk
 #define MP3_GRAY_LT_R 205
 #define MP3_GRAY_LT_G 205

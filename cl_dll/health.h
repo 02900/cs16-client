@@ -15,6 +15,11 @@
 #pragma once
 #define DMG_IMAGE_LIFE		2	// seconds that image is up
 
+#define MAX_DMG_INDICATORS	8
+#define DMG_IND_LIFE		1.0f
+#define DMG_IND_RADIUS		48		// inner arc radius in 480p pixels
+#define DMG_IND_MERGE_DEG	20.0f	// same-direction threshold for slot reuse
+
 #define DMG_IMAGE_POISON	0
 #define DMG_IMAGE_ACID		1
 #define DMG_IMAGE_COLD		2
@@ -95,6 +100,12 @@ struct DAMAGE_IMAGE
 	float fBaseline;
 	int	x, y;
 };
+
+struct dmg_indicator_t
+{
+	Vector vecFrom;		// world-space origin of the attacker
+	float  flExpire;
+};
 	
 //
 //-----------------------------------------------------
@@ -118,14 +129,19 @@ public:
 	int m_HUD_dmg_bio;
 	int m_HUD_cross;
 	int m_iMp3Silhouette;   // gfx/mp3/health_silhouette.png (0 = use the CS number)
+	int m_iMp3DmgInd;       // gfx/mp3/damage_indicator.png (0 = not loaded)
 	//float m_fAttackFront, m_fAttackRear, m_fAttackLeft, m_fAttackRight;
 	float m_fAttack[4];
 	void GetPainColor(int &r, int &g, int &b , int &a);
 	float m_fFade;
 
 	int m_iPlayerLastPointedAt;
+
+	dmg_indicator_t m_DmgInd[MAX_DMG_INDICATORS];
+
 private:
 	void DrawPain( float fTime );
+	void DrawPainMP3( float flTime );
 	void DrawDamage( float fTime );
 	void DrawHealthBar( float flTime );
 	void CalcDamageDirection( Vector vecFrom );

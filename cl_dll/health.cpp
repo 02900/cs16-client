@@ -86,6 +86,7 @@ int CHudHealth::Init(void)
 		m_fAttack[i] = 0;
 
 	memset(m_dmg, 0, sizeof(DAMAGE_IMAGE) * NUM_DMG_TYPES);
+	memset(m_DmgInd, 0, sizeof(m_DmgInd));
 
 	CVAR_CREATE("cl_corpsestay", "600", FCVAR_ARCHIVE);
 	gHUD.AddHudElem(this);
@@ -105,6 +106,8 @@ void CHudHealth::Reset( void )
 	{
 		m_dmg[i].fExpire = 0;
 	}
+
+	memset(m_DmgInd, 0, sizeof(m_DmgInd));
 }
 
 int CHudHealth::VidInit(void)
@@ -131,10 +134,12 @@ int CHudHealth::VidInit(void)
 	giDmgWidth = gHUD.GetSpriteRect(m_HUD_dmg_bio).Height();
 
 	m_iMp3Silhouette = 0;
+	m_iMp3DmgInd = 0;
 	if( g_iXash )
 	{
 		texFlags_t f = (texFlags_t)( TF_NOMIPMAP | TF_CLAMP | TF_HAS_ALPHA );
 		m_iMp3Silhouette = gRenderAPI.GL_LoadTexture( "gfx/mp3/health_silhouette.png", NULL, 0, f );
+		m_iMp3DmgInd     = gRenderAPI.GL_LoadTexture( "gfx/mp3/damage_indicator.png",  NULL, 0, f );
 	}
 
 	return 1;
@@ -376,6 +381,8 @@ void CHudHealth::CalcDamageDirection( Vector vecFrom )
 		return;
 	}
 
+	Vector vecWorldFrom = vecFrom;	// world position for the MP3 indicator
+
 	vecFrom = vecFrom - gHUD.m_vecOrigin;
 	flDistToTarget = vecFrom.Length();
 	vecFrom = vecFrom.Normalize();
@@ -400,10 +407,61 @@ void CHudHealth::CalcDamageDirection( Vector vecFrom )
 		if (front < -EPSILON)
 			m_fAttack[3] = max(m_fAttack[3], 0 - front );
 	}
+
+	// MP3 directional indicator: find a slot to store this hit
+	Vector diff_new = vecWorldFrom - gHUD.m_vecOrigin;
+	float yaw_new = atan2f(diff_new.y, diff_new.x) * 180.0f / 3.14159265f;
+
+	int bestSlot = -1;
+	float oldestExpire = 1.0e30f;
+	int fallbackIdx = 0;
+
+	for( int i = 0; i < MAX_DMG_INDICATORS; i++ )
+	{
+		if( m_DmgInd[i].flExpire > gHUD.m_flTime )
+		{
+			// active: check if this hit comes from roughly the same direction
+			Vector diff_old = m_DmgInd[i].vecFrom - gHUD.m_vecOrigin;
+			float yaw_old = atan2f(diff_old.y, diff_old.x) * 180.0f / 3.14159265f;
+			float adiff = yaw_new - yaw_old;
+			while( adiff >  180.0f ) adiff -= 360.0f;
+			while( adiff <= -180.0f ) adiff += 360.0f;
+			if( fabsf(adiff) < DMG_IND_MERGE_DEG )
+			{
+				bestSlot = i;
+				break;
+			}
+			if( m_DmgInd[i].flExpire < oldestExpire )
+			{
+				oldestExpire = m_DmgInd[i].flExpire;
+				fallbackIdx  = i;
+			}
+		}
+		else
+		{
+			bestSlot = i;
+			break;
+		}
+	}
+
+	if( bestSlot == -1 )
+		bestSlot = fallbackIdx;
+
+	m_DmgInd[bestSlot].vecFrom  = vecWorldFrom;
+	m_DmgInd[bestSlot].flExpire = gHUD.m_flTime + DMG_IND_LIFE;
 }
 
 void CHudHealth::DrawPain(float flTime)
 {
+	static cvar_t *cl_hud_mp3 = NULL;
+	if( !cl_hud_mp3 ) cl_hud_mp3 = gEngfuncs.pfnRegisterVariable( "cl_hud_mp3", "1", FCVAR_ARCHIVE );
+
+	if( g_iXash && m_iMp3DmgInd && cl_hud_mp3->value )
+	{
+		DrawPainMP3( flTime );
+		return;
+	}
+
 	if (m_fAttack[0] == 0 &&
 		m_fAttack[1] == 0 &&
 		m_fAttack[2] == 0 &&
@@ -429,6 +487,71 @@ void CHudHealth::DrawPain(float flTime)
 		else
 			m_fAttack[i] = 0;
 	}
+}
+
+void CHudHealth::DrawPainMP3( float flTime )
+{
+	int cx = ScreenWidth  / 2;
+	int cy = ScreenHeight / 2;
+
+	int hp = m_iHealth; if( hp < 0 ) hp = 0; if( hp > 100 ) hp = 100;
+
+	int indW, indPeakAlpha;
+	if( hp < 25 )      { indW = YRES(220); indPeakAlpha = 255; }
+	else if( hp < 50 ) { indW = YRES(180); indPeakAlpha = 200; }
+	else               { indW = YRES(140); indPeakAlpha = 160; }
+
+	int W = indW;
+	int H = 2 * W;
+	int R = YRES( DMG_IND_RADIUS );
+
+	gRenderAPI.GL_Bind( 0, m_iMp3DmgInd );
+	gEngfuncs.pTriAPI->RenderMode( kRenderTransTexture );
+	gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+
+	for( int i = 0; i < MAX_DMG_INDICATORS; i++ )
+	{
+		if( m_DmgInd[i].flExpire <= flTime )
+			continue;
+
+		Vector diff = m_DmgInd[i].vecFrom - gHUD.m_vecOrigin;
+		float worldYaw = atan2f(diff.y, diff.x) * 180.0f / 3.14159265f;
+		float rel = worldYaw - gHUD.m_vecAngles[1]; // [1] = YAW
+		while( rel >  180.0f ) rel -= 360.0f;
+		while( rel <= -180.0f ) rel += 360.0f;
+
+		// base asset = arc pointing East (right) = rel -90; rotate so arc tracks attacker
+		float alpha = -(rel + 90.0f) * 3.14159265f / 180.0f;
+		float ca = cosf(alpha);
+		float sa = sinf(alpha);
+
+		float timeFade = (m_DmgInd[i].flExpire - flTime) / DMG_IND_LIFE;
+		int alpha8     = (int)( indPeakAlpha * timeFade );
+
+		gEngfuncs.pTriAPI->Color4ub( MP3_DARK_RED_R, MP3_DARK_RED_G, MP3_DARK_RED_B, alpha8 );
+
+		// quad in local space: x in [R, R+W], y in [-H/2, +H/2]
+		float corners[4][2] = {
+			{ (float)R,       -(float)H * 0.5f },
+			{ (float)(R + W), -(float)H * 0.5f },
+			{ (float)(R + W),  (float)H * 0.5f },
+			{ (float)R,        (float)H * 0.5f }
+		};
+		float uvs[4][2] = { {0,0}, {1,0}, {1,1}, {0,1} };
+
+		gEngfuncs.pTriAPI->Begin( TRI_QUADS );
+		for( int j = 0; j < 4; j++ )
+		{
+			float dx = corners[j][0];
+			float dy = corners[j][1];
+			gEngfuncs.pTriAPI->TexCoord2f( uvs[j][0], uvs[j][1] );
+			gEngfuncs.pTriAPI->Vertex3f( cx + dx * ca - dy * sa,
+			                             cy + dx * sa + dy * ca, 0 );
+		}
+		gEngfuncs.pTriAPI->End();
+	}
+
+	gEngfuncs.pTriAPI->RenderMode( kRenderNormal );
 }
 
 void CHudHealth::DrawDamage(float flTime)
